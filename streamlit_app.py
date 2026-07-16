@@ -194,7 +194,8 @@ with right:
         cols[i % 3].markdown(f"<div class='tile'><div class='k'>{k}</div><div class='v'>{v}</div></div>",
                              unsafe_allow_html=True)
     st.caption(f"Sub-scores — habitability {score['components']['habitability']}, "
-               f"thermal headroom {score['components']['thermal_headroom']}, "
+               f"thermal exceedance {score['components']['thermal_exceedance']} "
+               f"({hw.exceedance_degh:.0f} °C·h above caution), "
                f"backup {score['components']['backup']}")
 
 st.divider()

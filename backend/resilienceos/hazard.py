@@ -7,10 +7,11 @@ solar + battery can carry critical loads.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import pandas as pd
 
+from . import presets
 from .building import Building
 from .twin import simulate
 from .solar import pv_generation_kw
@@ -29,6 +30,7 @@ class HeatwaveResult:
     occupied_hours: int
     hours_above_caution: int
     hours_above_danger: int
+    exceedance_degh: float              # degree-hours of heat index above caution [C.h]
     profile: list                       # hourly dicts for charting
 
     def to_dict(self):
@@ -50,6 +52,86 @@ class OutageResult:
         return self.__dict__.copy()
 
 
+def degree_hours_above(heat_index: pd.Series, threshold: float = HI_CAUTION) -> float:
+    """
+    Cumulative degree-hours of heat index above `threshold` [C.h].
+
+    Unlike a peak-only metric this is continuous and unbounded: it responds to BOTH how hot
+    it gets and for how long, and it never saturates. That matters because the peak-based
+    headroom score used to clamp to zero above the danger line, making the model blind to
+    real improvements in exactly the dangerous regime it exists to analyse.
+    """
+    return float((heat_index - threshold).clip(lower=0).sum())
+
+
+@dataclass
+class FloodResult:
+    flood_depth_m: float
+    failed_equipment: list           # asset names inundated at this depth
+    surviving_der: dict              # what the shelter still has after the water
+    backup_hours: float              # critical-load ride-through with the surviving DER
+    required_backup_h: float
+    operational: bool                # can it carry critical load for the required window?
+    failure_reason: str | None
+    placeholder: bool                # True while presets data is unsurveyed
+
+    def to_dict(self):
+        return self.__dict__.copy()
+
+
+def analyze_flood(
+    b: Building,
+    day: pd.DataFrame,
+    flood_depth_m: float,
+    start_hour: int = 14,
+) -> FloodResult:
+    """
+    Flood hazard: water above an asset's mounting height takes that asset offline, and the
+    shelter must then carry its critical load on whatever DER survived.
+
+    Deliberately REUSES `backup_duration_h()` unchanged rather than reimplementing the energy
+    balance: the flood only decides WHICH resources exist, and the existing solar+battery model
+    decides how long they last. Roof PV panels survive but their ground-level inverter usually
+    does not, which is why elevation is tracked per-asset.
+    """
+    failed = presets.flooded_equipment(flood_depth_m)
+
+    # Apply each drowned asset's effect to a copy of the Building, then let the existing
+    # energy-balance model run against the degraded resource set.
+    effects: dict = {}
+    for asset in failed:
+        effects.update(presets.EQUIPMENT_EFFECT.get(asset, {}))
+    degraded = replace(b, **effects) if effects else b
+
+    backup = backup_duration_h(degraded, day, start_hour)
+    required = presets.REQUIRED_BACKUP_H
+    operational = backup >= required
+
+    reason = None
+    if not operational:
+        if "transformer" in failed:
+            reason = f"Transformer inundated at {flood_depth_m:.1f} m; grid supply lost"
+        elif failed:
+            reason = f"{', '.join(failed)} inundated; {backup:.1f}h backup vs {required:.0f}h required"
+        else:
+            reason = f"Insufficient stored energy: {backup:.1f}h vs {required:.0f}h required"
+
+    return FloodResult(
+        flood_depth_m=flood_depth_m,
+        failed_equipment=failed,
+        surviving_der={
+            "solar_kwp": degraded.solar_kwp,
+            "battery_kwh": degraded.battery_kwh,
+            "has_generator": degraded.has_generator,
+        },
+        backup_hours=backup,
+        required_backup_h=required,
+        operational=operational,
+        failure_reason=reason,
+        placeholder=presets.DATA_IS_PLACEHOLDER,
+    )
+
+
 def analyze_heatwave(b: Building, day: pd.DataFrame, hvac_active: bool = True) -> HeatwaveResult:
     sim = simulate(b, day, hvac_active=hvac_active)
     occ = sim[sim["occupancy"] > 0]
@@ -61,6 +143,7 @@ def analyze_heatwave(b: Building, day: pd.DataFrame, hvac_active: bool = True) -
         occupied_hours=int(len(occ)),
         hours_above_caution=int((sim["heat_index"] >= HI_CAUTION).sum()),
         hours_above_danger=int((sim["heat_index"] >= HI_DANGER).sum()),
+        exceedance_degh=round(degree_hours_above(sim["heat_index"]), 2),
         profile=sim.assign(time=sim["time"].astype(str)).to_dict("records"),
     )
 

@@ -7,33 +7,123 @@ output that the LLM copilot later explains.
 """
 from __future__ import annotations
 
+import math
+
 import pandas as pd
 
 from .building import Building
-from .hazard import HeatwaveResult, OutageResult, HI_CAUTION, HI_DANGER
+from .hazard import HeatwaveResult, OutageResult, HI_CAUTION
 from .solar import pv_generation_kw
+
+# Heat-index degree-hours above caution at which the thermal sub-score halves.
+# Chosen against MEASURED exposure from the twin, which spans ~13 C.h (mild) to ~860 C.h
+# (severe free-float). An exponential decay was tried first and rejected: exp(-degh/40)
+# underflows to 0 above ~200 C.h, which silently re-created the very saturation this replaces.
+# A hyperbolic decay keeps resolution across the whole real range.
+# TODO(user): re-anchor against surveyed comfort outcomes once field data exists.
+DEGH_HALF = 200.0
 
 
 def resilience_score(hw: HeatwaveResult, outage: OutageResult) -> dict:
     """
     0-100 composite. Transparent sub-scores so the copilot can explain it.
       - habitability: share of occupied hours that stay safe
-      - thermal_headroom: how far peak heat index sits below the danger line
+      - thermal_exceedance: cumulative heat-index degree-hours above the caution line
       - backup: outage backup duration vs a 6h target
+
+    `thermal_exceedance` replaces an earlier peak-based "headroom" term that was clamped to
+    zero once the peak heat index passed the danger line. That clamp made the reward term
+    saturate while the habitability penalty stayed live, so a retrofit could cut 7.4C off the
+    peak and still score WORSE overall. 1/(1+degh/HALF) is strictly decreasing on [0, inf) and
+    never reaches zero, so any reduction in degree-hours always raises the sub-score — no dead
+    zone in the dangerous regime. It also prices duration, not just the single worst hour.
     """
     habitability = (hw.safe_occupancy_hours / hw.occupied_hours) if hw.occupied_hours else 1.0
-    headroom = max(0.0, min(1.0, (HI_DANGER - hw.peak_heat_index) / (HI_DANGER - HI_CAUTION)))
-    backup = max(0.0, min(1.0, outage.backup_hours / 6.0))
+    exceedance = 1.0 / (1.0 + hw.exceedance_degh / DEGH_HALF)
+    # Upper clamp only: exceeding the 6h backup target earns no extra credit, but the reward
+    # end is never floored (that asymmetry is exactly what broke the old headroom term).
+    backup = min(1.0, outage.backup_hours / 6.0)
 
-    score = 100 * (0.45 * habitability + 0.30 * headroom + 0.25 * backup)
+    score = 100 * (0.45 * habitability + 0.30 * exceedance + 0.25 * backup)
     return {
         "score": round(score),
+        # Unrounded score for RANKING. Rounding to int destroys sub-point differences, and a
+        # cheap-but-real retrofit can easily be worth <1 point — rounding first made the budget
+        # optimizer see a 0 gain and refuse to recommend it. Display uses `score`; comparisons
+        # must use `score_exact`.
+        "score_exact": round(score, 3),
         "band": _band(score),
         "components": {
             "habitability": round(100 * habitability),
-            "thermal_headroom": round(100 * headroom),
+            "thermal_exceedance": round(100 * exceedance),
             "backup": round(100 * backup),
         },
+    }
+
+
+def ceri_score(flood, graph: dict, b: Building) -> dict:
+    """
+    CERI — Climate Energy Readiness Index. 0-100, four transparent sub-scores:
+
+      energy_readiness         DER capacity vs the critical load it must carry
+      flood_readiness          how much elevation margin the assets have over the flood line
+      backup_duration          surviving ride-through vs the required window
+      critical_vulnerabilities single points of failure in the dependency graph
+
+    Follows `resilience_score`'s transparency contract (score / score_exact / band /
+    components) and its hard-won rule: clamp the UPPER end only. Flooring a reward term is what
+    made the old heat score blind to real improvements, so every sub-score below stays able to
+    move in both directions across its whole real range.
+    """
+    from . import presets
+    from .dependency_graph import single_points_of_failure
+
+    # DER capable of carrying critical load. Ratio >= 1 means fully covered; upper-clamped
+    # because over-provisioning past the need earns no more credit.
+    if b.critical_load_kw > 0:
+        der_cover = (b.battery_kwh / b.critical_load_kw) / presets.REQUIRED_BACKUP_H
+    else:
+        der_cover = 1.0
+    energy_readiness = min(1.0, der_cover)
+
+    # Elevation margin of the WEAKEST power-relevant asset over the flood line.
+    margins = [
+        presets.EQUIPMENT_ELEVATION_M[n["id"]] - presets.FLOOD_LINE_M
+        for n in graph["nodes"]
+        if n["is_power_source"] and n["id"] in presets.EQUIPMENT_ELEVATION_M
+    ]
+    if margins:
+        worst = min(margins)
+        # Logistic on the margin: continuous either side of the flood line, so a deeply
+        # submerged asset still scores worse than a marginally submerged one and any
+        # re-siting always registers. Clamped at neither end.
+        flood_readiness = 1.0 / (1.0 + math.exp(-worst / 0.3))
+    else:
+        flood_readiness = 0.0
+
+    backup_duration = min(1.0, flood.backup_hours / presets.REQUIRED_BACKUP_H)
+
+    spofs = single_points_of_failure(graph)
+    critical_vulnerabilities = 1.0 / (1.0 + len(spofs) / max(presets.CRITICAL_SPOF_LIMIT, 1))
+
+    score = 100 * (
+        0.30 * energy_readiness
+        + 0.25 * flood_readiness
+        + 0.30 * backup_duration
+        + 0.15 * critical_vulnerabilities
+    )
+    return {
+        "score": round(score),
+        "score_exact": round(score, 3),
+        "band": _band(score),
+        "components": {
+            "energy_readiness": round(100 * energy_readiness),
+            "flood_readiness": round(100 * flood_readiness),
+            "backup_duration": round(100 * backup_duration),
+            "critical_vulnerabilities": round(100 * critical_vulnerabilities),
+        },
+        "single_points_of_failure": spofs,
+        "placeholder": presets.DATA_IS_PLACEHOLDER,
     }
 
 

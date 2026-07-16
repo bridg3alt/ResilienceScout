@@ -48,10 +48,12 @@ def _metrics(b: Building, day: pd.DataFrame, outage_start: int, outage_dur: int)
     out = analyze_outage(b, day, outage_start, outage_dur)
     score = resilience_score(hw, out)
     return {
-        "resilience_score": score["score"],
+        "resilience_score": score["score"],            # rounded — for display
+        "resilience_score_exact": score["score_exact"],  # unrounded — for ranking/deltas
         "band": score["band"],
         "peak_heat_index": hw.peak_heat_index,
         "safe_occupancy_hours": hw.safe_occupancy_hours,
+        "exceedance_degh": hw.exceedance_degh,
         "backup_hours": out.backup_hours,
     }
 
@@ -78,15 +80,18 @@ def budget_optimizer(b: Building, day: pd.DataFrame, budget_inr: float,
     for key, spec in RETROFITS.items():
         b2 = spec["apply"](b)
         m = _metrics(b2, day, outage_start, outage_dur)
-        gain = m["resilience_score"] - base["resilience_score"]
+        # Rank on the UNROUNDED score: a cheap retrofit worth <1 point is still worth doing,
+        # and rounding first zeroed it out of the ranking entirely.
+        gain = m["resilience_score_exact"] - base["resilience_score_exact"]
         ranked.append({
             "key": key,
             "label": spec["label"],
             "cost_inr": spec["cost_inr"],
-            "score_gain": round(gain, 1),
+            "score_gain": round(gain, 2),
             "gain_per_lakh": round(gain / (spec["cost_inr"] / 100000), 2) if spec["cost_inr"] else 0,
             "backup_gain_h": round(m["backup_hours"] - base["backup_hours"], 1),
             "heat_index_drop": round(base["peak_heat_index"] - m["peak_heat_index"], 2),
+            "degh_drop": round(base["exceedance_degh"] - m["exceedance_degh"], 1),
         })
     ranked.sort(key=lambda r: r["gain_per_lakh"], reverse=True)
 

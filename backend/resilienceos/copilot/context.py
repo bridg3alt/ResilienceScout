@@ -14,14 +14,15 @@ def build_context(b: Building, hw: HeatwaveResult, out: OutageResult, score: dic
         f"generator={'yes' if b.has_generator else 'no'}, critical load {b.critical_load_kw:.0f} kW.",
         f"Resilience score: {score['score']}/100 ({score['band']}). "
         f"Sub-scores habitability={score['components']['habitability']}, "
-        f"thermal_headroom={score['components']['thermal_headroom']}, "
+        f"thermal_exceedance={score['components']['thermal_exceedance']}, "
         f"backup={score['components']['backup']}.",
         f"Forecast heatwave day: outdoor peak {hw.peak_outdoor:.1f} C.",
         f"PASSIVE survivability (if cooling unavailable): peak indoor {hw.peak_indoor:.1f} C, "
         f"peak heat index {hw.peak_heat_index:.1f} C. "
         f"Safe occupied hours {hw.safe_occupancy_hours}/{hw.occupied_hours}; "
         f"{hw.hours_above_caution}h above caution ({HI_CAUTION:.0f} C), "
-        f"{hw.hours_above_danger}h above danger ({HI_DANGER:.0f} C).",
+        f"{hw.hours_above_danger}h above danger ({HI_DANGER:.0f} C); "
+        f"cumulative heat exposure {hw.exceedance_degh:.1f} degree-hours above caution.",
         f"Outage scenario: starts hour {out.start_hour}, lasts {out.duration_h}h. "
         f"Peak indoor during outage {out.peak_indoor_during:.1f} C. "
         + (f"Indoor reaches the caution heat index ~{out.hours_until_unsafe:.0f}h after power loss. "
