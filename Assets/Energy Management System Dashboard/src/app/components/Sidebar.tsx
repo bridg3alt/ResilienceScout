@@ -1,11 +1,11 @@
 import { useState } from "react";
 import { cn } from "./ui/utils";
-import { 
-  LayoutDashboard, 
-  BarChart3, 
-  Settings, 
-  FileText, 
-  User,
+import {
+  LayoutDashboard,
+  Network,
+  Building2,
+  Wrench,
+  Bot,
   Zap,
   X
 } from "lucide-react";
@@ -30,34 +30,34 @@ export function Sidebar({ currentPage, onPageChange }: SidebarProps) {
   
   const navigationItems = [
     {
-      id: "dashboard",
-      name: "Dashboard",
+      id: "overview",
+      name: "Overview",
       icon: LayoutDashboard,
-      description: "Overview & monitoring"
+      description: "CERI & readiness"
     },
     {
-      id: "analytics",
-      name: "Analytics", 
-      icon: BarChart3,
-      description: "Advanced analytics"
+      id: "dependency",
+      name: "Dependency Map",
+      icon: Network,
+      description: "Failure cascades"
     },
     {
-      id: "configuration",
-      name: "Configuration",
-      icon: Settings,
-      description: "System settings"
+      id: "shelters",
+      name: "Shelter Status",
+      icon: Building2,
+      description: "Operational state"
     },
     {
-      id: "reports",
-      name: "Reports",
-      icon: FileText,
-      description: "Generate reports"
+      id: "recovery",
+      name: "Recovery",
+      icon: Wrench,
+      description: "Repair priority"
     },
     {
-      id: "settings",
-      name: "Settings & Profile",
-      icon: User,
-      description: "User preferences"
+      id: "copilot",
+      name: "Copilot",
+      icon: Bot,
+      description: "Grounded answers"
     }
   ];
 
