@@ -80,8 +80,8 @@ class Building:
     # Comfort / operations
     t_set_cooling: float = 26.0
     critical_load_kw: float = 5.0         # loads that must stay powered in an outage
-    # Calibration knobs (Tier-2). Defaults reproduce the uncalibrated twin exactly;
-    # validation.calibrate() tunes these against measured indoor-temperature logs.
+    # Calibration knobs. Defaults reproduce the uncalibrated twin exactly. Nothing tunes them
+    # automatically any more; set them by hand if measured indoor-temperature logs ever exist.
     infiltration_ach: float = 0.7         # natural air changes per hour
     capacitance_override: float | None = None  # J/m2K; None -> MASS_CLASS[mass_class]
     solar_aperture_scale: float = 1.0     # scales inferred solar gain

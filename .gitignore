@@ -3,10 +3,10 @@ __pycache__/
 *.pyc
 .env
 sample_report.html
-.streamlit/secrets.toml
 *.egg-info/
 .cache/
 .pytest_cache/
 node_modules/
 dist/
 .vite/
+.claude/

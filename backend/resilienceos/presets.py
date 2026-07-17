@@ -1,18 +1,29 @@
 """
-ResilienceScout — the SINGLE placeholder chokepoint.
+ResilienceScout — the placeholder chokepoint.
 
-EVERY number in this file is INVENTED. None of it has been surveyed. It exists so the app can
-run end-to-end for a demo, and it is quarantined here so that replacing it with real data is a
+Almost every number here is INVENTED and has never been surveyed. It exists so the app can run
+end-to-end for a demo, and it is quarantined here so that replacing it with real data is a
 one-file job rather than an archaeology expedition.
+
+Two epistemic tiers, and the comments say which is which:
+  * SOURCED  — a real, cited value. Carries its citation, and no TODO.
+  * INVENTED — a guess. Carries a TODO(user). This is still the large majority of the file.
+
+One placeholder lives outside this file: REPAIR_EFFORT_H in recovery.py.
 
 `DATA_IS_PLACEHOLDER` is surfaced through the API as `placeholder: true` on every response, and
 the dashboard renders a persistent "DEMO DATA — NOT SURVEYED" banner while it is True. Flip it
-to False ONLY once every TODO below has been replaced with a surveyed value.
+to False ONLY once every TODO below (and REPAIR_EFFORT_H) has been replaced with a surveyed
+value. See docs/SURVEY.md for how to collect them.
 
-WHAT MUST BE SURVEYED TO MAKE THIS REAL
-  1. Campus flood-line elevation and historical flood depths (Kodakara drainage study).
+WHAT MUST BE SURVEYED TO MAKE THIS REAL — no amount of desk research substitutes for these:
+  1. Campus flood-line elevation and historical flood depths. KSDMA publishes only probability
+     zones, not depths, so this needs the 2018 high-water survey.
   2. Mounting height of each piece of electrical equipment, measured from finished floor.
+     Standards give MINIMUMS, not actuals; assuming code-minimum biases the model toward
+     falsely reporting a shelter safe.
   3. Population served per shelter, and which clinics/pumps depend on which transformer.
+     The campus single-line diagram answers the dependency half of this directly.
   4. Actual DER nameplate: solar kWp, battery kWh/chemistry, generator fuel + runtime.
 """
 from __future__ import annotations
@@ -25,6 +36,10 @@ DATA_IS_PLACEHOLDER = True
 FLOOD_LINE_M = 0.9
 
 # TODO(user): replace with modelled/observed depths for the Kodakara campus area.
+# Checked KSDMA (sdma.kerala.gov.in/hazard-maps): they publish flood hazard PROBABILITY maps
+# per district (historic + RCP 8.5) and return-period rasters, but no inundation DEPTH in
+# metres. So there is no public source for these numbers — they must come from the 2018
+# high-water survey described in docs/SURVEY.md. Still invented.
 FLOOD_SCENARIOS_M = {
     "nuisance": 0.2,
     "moderate": 0.6,
@@ -61,7 +76,12 @@ EQUIPMENT_EFFECT = {
 }
 
 # --- Operational targets -------------------------------------------------------------------
-# TODO(user): confirm against the state disaster-management shelter standard.
+# TODO(user): pick and defend this number locally — there is no standard to copy it from.
+# Checked the Kerala State Minimum Standards of Relief (KSDMA, Ed. 1, 9 July 2020): it requires
+# only that "Power supply to relief camps shall be ensured (KSEB)" and that "Basic lighting
+# facilities shall be made available", with NO duration in hours. NDMA's national guidelines are
+# no more specific. So 12 h is OUR assumption, not a regulatory threshold, and any claim that a
+# shelter "meets the standard" on backup hours would be unfounded.
 REQUIRED_BACKUP_H = 12.0     # target critical-load ride-through during a flood event
 CRITICAL_SPOF_LIMIT = 2      # above this many single points of failure, score bottoms out
 
@@ -76,7 +96,12 @@ SHELTERS = [
         "pop_served": 400,
         "building": {
             "name": "Block A — Main Hall",
-            "latitude": 10.5276, "longitude": 76.2144,   # TODO(user): Kodakara, verify
+            # SOURCED: Sahrdaya College of Engineering & Technology, Kodakara, Thrissur.
+            # Was 10.5276, 76.2144 — that is Thrissur CITY, ~19 km north, so every weather call
+            # was keyed to the wrong town. Kodakara is 10.3719, 76.3056 (Wikipedia); the campus
+            # itself is 10.3595, 76.2859. Campus-centre precision is fine here: all three blocks
+            # share one coordinate because Open-Meteo's grid is coarser than the campus anyway.
+            "latitude": 10.3595, "longitude": 76.2859,
             "floor_area_m2": 1200.0, "num_floors": 3,
             "solar_kwp": 20.0, "battery_kwh": 20.0,
             "critical_load_kw": 5.0, "has_generator": True,
@@ -88,7 +113,7 @@ SHELTERS = [
         "pop_served": 250,
         "building": {
             "name": "Block B — Community Centre",
-            "latitude": 10.5276, "longitude": 76.2144,
+            "latitude": 10.3595, "longitude": 76.2859,
             "floor_area_m2": 800.0, "num_floors": 2,
             "solar_kwp": 10.0, "battery_kwh": 0.0,
             "critical_load_kw": 3.0, "has_generator": False,
@@ -100,7 +125,7 @@ SHELTERS = [
         "pop_served": 150,
         "building": {
             "name": "Block C — Clinic Annexe",
-            "latitude": 10.5276, "longitude": 76.2144,
+            "latitude": 10.3595, "longitude": 76.2859,
             "floor_area_m2": 500.0, "num_floors": 1,
             "solar_kwp": 5.0, "battery_kwh": 10.0,
             "critical_load_kw": 4.0, "has_generator": False,

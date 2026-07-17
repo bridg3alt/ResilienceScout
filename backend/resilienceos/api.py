@@ -1,9 +1,8 @@
 """
-FastAPI backend — exposes the ResilienceOS engine as JSON.
+FastAPI backend — exposes the ResilienceScout engine as JSON.
 
-This is the product spine / "API platform" from the vision: any frontend (the
-Streamlit demo, a future Next.js app, or a partner integration) can drive the
-whole pipeline through these endpoints.
+This is the product spine: any frontend (the React dashboard, or a partner
+integration) can drive the whole pipeline through these endpoints.
 
 Run: uvicorn resilienceos.api:app --reload  (from the backend/ directory)
 """

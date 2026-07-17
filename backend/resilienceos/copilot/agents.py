@@ -6,7 +6,7 @@ notes are then synthesised by a supervisor:
 
     Weather Analyst  -> reads the forecast / hazard numbers
     Building Physicist -> interprets the twin's thermal behaviour
-    Energy Optimizer  -> reasons over solar / battery / backup (+ MILP schedule if present)
+    Energy Optimizer  -> reasons over solar / battery / backup duration
     Facility Manager  -> turns the above into concrete, prioritised actions
     Supervisor        -> synthesises one grounded, cited answer
 
@@ -42,8 +42,7 @@ SPECIALISTS = {
     "energy_optimizer": (
         "Energy Optimizer",
         "Focus ONLY on energy: rooftop solar, battery state and backup duration, critical-load "
-        "ride-through, and (if an optimised dispatch schedule is provided) how to charge/"
-        "discharge and when to cool for least cost while staying safe.",
+        "ride-through, and when to charge/discharge and cool to stay safe for longest.",
     ),
     "facility_manager": (
         "Facility Manager",
@@ -84,8 +83,8 @@ def answer_multiagent(question: str, sim_context: str, k: int = 3,
     """
     Orchestrate the specialist -> supervisor pipeline over shared grounding.
 
-    extra_context: optional extra grounding (e.g. a formatted MILP dispatch summary) appended
-    to the simulation context so the Energy Optimizer can reason over the optimised schedule.
+    extra_context: optional extra grounding appended to the simulation context, for callers
+    that have domain numbers the shared context doesn't already carry.
     """
     snippets = retrieve(question, k=k)
     evidence = "\n\n".join(f"[{s['source']}]\n{s['text']}" for s in snippets)

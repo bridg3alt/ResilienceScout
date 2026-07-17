@@ -1,8 +1,8 @@
 """
 Resilience report — a self-contained HTML one-pager (print-to-PDF from browser).
 
-Kept dependency-light on purpose: no wkhtmltopdf/weasyprint. The Streamlit app
-offers this as a download; open it and Ctrl+P -> Save as PDF for the application upload.
+Kept dependency-light on purpose: no wkhtmltopdf/weasyprint. Open the generated file
+and Ctrl+P -> Save as PDF for the application upload.
 """
 from __future__ import annotations
 
