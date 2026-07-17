@@ -19,9 +19,9 @@ from . import presets, weather as wx
 from .dependency_graph import build_graph, downstream, failed_nodes, single_points_of_failure
 from .hazard import analyze_flood, analyze_heatwave, analyze_outage
 from .engine import ceri_score, resilience_score, operational_plan, outage_sequence
-from .recovery import prioritize
+from .recovery import prioritize, restoration_plan
 from .scenarios import compare, budget_optimizer, RETROFITS
-from .copilot.context import build_context
+from .copilot.context import build_context, build_flood_context
 from .copilot.rag import answer as copilot_answer
 from .copilot.agents import answer_multiagent
 
@@ -160,17 +160,35 @@ def _depth_for(phase: str, explicit: float | None = None) -> float:
     return PHASE_DEPTH_M[phase]
 
 
-def _site_state(site_id: str, depth_m: float):
-    """(site, building, day, flood, graph) for one shelter. Reuses the cached weather day."""
+def _site_state(site_id: str, depth_m: float, repaired: frozenset[str] = frozenset()):
+    """
+    (site, building, day, flood, graph) for one shelter. Reuses the cached weather day.
+
+    `repaired` restores the named assets (the "after the flood" recovery phase) so the shelter
+    is re-scored on the mended resource set. Empty by default = as-flooded state.
+    """
     try:
         site = presets.get_shelter(site_id)
     except KeyError as e:
         raise HTTPException(404, str(e))
     b = Building(**site["building"])
     day = _day_for(b.latitude, b.longitude)
-    flood = analyze_flood(b, day, depth_m)
-    graph = build_graph(site, b, flood)
+    flood = analyze_flood(b, day, depth_m, repaired=repaired)
+    graph = build_graph(site, b, flood, repaired=repaired)
     return site, b, day, flood, graph
+
+
+def _repaired_for(phase: str, site_id: str, depth_m: float) -> frozenset[str]:
+    """
+    Recovery phase = the shelter after its ranked minimum repairs are applied. Find that repair
+    set from the AS-FLOODED graph (via the existing recovery search), so the caller can re-score
+    the shelter with those assets restored. Any other phase repairs nothing.
+    """
+    if phase != "recovery":
+        return frozenset()
+    _site, _b, _day, _flood, graph = _site_state(site_id, depth_m)
+    plan = restoration_plan(graph, set(failed_nodes(graph)))
+    return frozenset(plan["repairs"])
 
 
 @app.get("/api/sites")
@@ -198,7 +216,8 @@ def api_sites():
 @app.get("/api/sites/{site_id}/ceri")
 def api_ceri(site_id: str, phase: str = "preparedness", flood_depth_m: float | None = None):
     depth = _depth_for(phase, flood_depth_m)
-    site, b, _day, flood, graph = _site_state(site_id, depth)
+    repaired = _repaired_for(phase, site_id, depth)
+    site, b, _day, flood, graph = _site_state(site_id, depth, repaired)
     c = ceri_score(flood, graph, b)
     return {
         "site_id": site_id,
@@ -212,7 +231,8 @@ def api_ceri(site_id: str, phase: str = "preparedness", flood_depth_m: float | N
 @app.get("/api/sites/{site_id}/backup")
 def api_backup(site_id: str, phase: str = "active_flood", flood_depth_m: float | None = None):
     depth = _depth_for(phase, flood_depth_m)
-    site, _b, _day, flood, _graph = _site_state(site_id, depth)
+    repaired = _repaired_for(phase, site_id, depth)
+    site, _b, _day, flood, _graph = _site_state(site_id, depth, repaired)
     return {
         "site_id": site_id,
         "site_name": site["name"],
@@ -231,7 +251,8 @@ def api_backup(site_id: str, phase: str = "active_flood", flood_depth_m: float |
 def api_dependency_graph(site_id: str, phase: str = "active_flood",
                          flood_depth_m: float | None = None):
     depth = _depth_for(phase, flood_depth_m)
-    _site, _b, _day, _flood, graph = _site_state(site_id, depth)
+    repaired = _repaired_for(phase, site_id, depth)
+    _site, _b, _day, _flood, graph = _site_state(site_id, depth, repaired)
     spofs = single_points_of_failure(graph)
     return {
         **graph,
@@ -248,7 +269,8 @@ def api_shelter_status(phase: str = "active_flood", flood_depth_m: float | None 
     depth = _depth_for(phase, flood_depth_m)
     rows = []
     for s in presets.SHELTERS:
-        site, b, _day, flood, graph = _site_state(s["id"], depth)
+        repaired = _repaired_for(phase, s["id"], depth)
+        site, b, _day, flood, graph = _site_state(s["id"], depth, repaired)
         c = ceri_score(flood, graph, b)
         rows.append({
             "site_id": s["id"],
@@ -280,6 +302,46 @@ def api_recovery(inp: RecoveryIn):
         failed_by_site[s["id"]] = failed_nodes(graph)
     out = prioritize(graphs, failed_by_site)
     return {"phase": inp.phase, "flood_depth_m": depth, **out}
+
+
+class FloodCopilotIn(BaseModel):
+    site_id: str = "block_a"
+    phase: str = "active_flood"
+    flood_depth_m: float | None = None
+    question: str = "Which shelter should we reinforce first, and why?"
+    multiagent: bool = False
+
+
+@app.post("/api/copilot")
+def api_copilot(inp: FloodCopilotIn):
+    """
+    Flood-aware copilot: grounds the LLM in the REAL shelters' live flood/CERI/dependency data
+    (the same numbers the dashboard shows), not the heat-engine stub. Reuses the existing RAG /
+    multi-agent pipeline unchanged — only the grounding context differs.
+    """
+    depth = _depth_for(inp.phase, inp.flood_depth_m)
+    # Validate the focus shelter up front so an unknown id 404s rather than silently dropping.
+    presets.get_shelter(inp.site_id)
+
+    shelters = []
+    for s in presets.SHELTERS:
+        repaired = _repaired_for(inp.phase, s["id"], depth)
+        _site, b, _day, flood, graph = _site_state(s["id"], depth, repaired)
+        c = ceri_score(flood, graph, b)
+        shelters.append({
+            "id": s["id"],
+            "name": s["name"],
+            "pop_served": s["pop_served"],
+            "ceri": c,
+            "flood": flood,
+            "spofs": single_points_of_failure(graph),
+        })
+
+    ctx = build_flood_context(shelters, inp.site_id, inp.phase, depth)
+    result = answer_multiagent(inp.question, ctx) if inp.multiagent else copilot_answer(inp.question, ctx)
+    result["site_id"] = inp.site_id
+    result["phase"] = inp.phase
+    return result
 
 
 @app.get("/api/ceri-trend/{site_id}")

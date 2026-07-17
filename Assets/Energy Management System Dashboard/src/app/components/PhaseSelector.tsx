@@ -3,9 +3,9 @@ import type { Phase } from "../lib/api";
 import { ShieldCheck, Waves, Wrench } from "lucide-react";
 
 const PHASES: { id: Phase; label: string; icon: typeof Waves; hint: string }[] = [
-  { id: "preparedness", label: "Preparedness", icon: ShieldCheck, hint: "Assessed against a moderate design flood" },
-  { id: "active_flood", label: "Active Flood", icon: Waves, hint: "Assessed against a severe flood in progress" },
-  { id: "recovery", label: "Recovery", icon: Wrench, hint: "Post-flood repair prioritisation" },
+  { id: "preparedness", label: "Before the flood", icon: ShieldCheck, hint: "Assessed against a moderate design flood" },
+  { id: "active_flood", label: "During the flood", icon: Waves, hint: "Assessed against a severe flood in progress" },
+  { id: "recovery", label: "After the flood", icon: Wrench, hint: "Severe flood with the ranked repairs applied — the 'after' state" },
 ];
 
 interface PhaseSelectorProps {

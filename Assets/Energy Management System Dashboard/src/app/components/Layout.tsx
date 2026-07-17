@@ -58,7 +58,7 @@ export function Layout() {
       case "recovery":
         return <RecoveryPage phase={phase} />;
       case "copilot":
-        return <CopilotPanel />;
+        return <CopilotPanel siteId={activeSite} phase={phase} />;
       case "overview":
       default:
         return (
@@ -80,8 +80,8 @@ export function Layout() {
       <main className="flex-1 overflow-auto">
         <div className="p-6 space-y-4">
           <div>
-            <h1 className="text-2xl font-semibold text-sidebar-foreground">ResilienceScout</h1>
-            <p className="text-sm text-sidebar-foreground/70">
+            <h1 className="text-2xl font-semibold text-foreground">ResilienceScout</h1>
+            <p className="text-sm text-muted-foreground">
               Flood-preparedness energy readiness for public emergency shelters.
             </p>
           </div>

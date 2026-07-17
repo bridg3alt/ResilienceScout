@@ -3,6 +3,7 @@ import { Badge } from "./ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
 import { CheckCircle2, XCircle } from "lucide-react";
 import type { ShelterStatusRow } from "../lib/api";
+import { BAND_CLASS } from "../lib/bands";
 
 interface ShelterStatusBoardProps {
   shelters: ShelterStatusRow[];
@@ -38,7 +39,12 @@ export function ShelterStatusBoard({ shelters, floodDepthM }: ShelterStatusBoard
                 <TableHead>Operational</TableHead>
                 <TableHead className="text-right">Backup left</TableHead>
                 <TableHead className="text-right">People</TableHead>
-                <TableHead className="text-right">CERI</TableHead>
+                <TableHead
+                  className="text-right"
+                  title="CERI — Climate Energy Readiness Index (0–100): how ready this shelter's energy system is for the flood."
+                >
+                  CERI
+                </TableHead>
                 <TableHead>Failure reason</TableHead>
               </TableRow>
             </TableHeader>
@@ -70,7 +76,9 @@ export function ShelterStatusBoard({ shelters, floodDepthM }: ShelterStatusBoard
                     {s.pop_served.toLocaleString()}
                   </TableCell>
                   <TableCell className="text-right">
-                    <Badge variant="outline">{s.ceri}</Badge>
+                    <Badge variant="outline" className={BAND_CLASS[s.band] ?? ""} title={s.band}>
+                      {s.ceri}
+                    </Badge>
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground max-w-xs">
                     {s.failure_reason ?? "—"}

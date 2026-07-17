@@ -53,8 +53,14 @@ export function BackupAdequacyChart({ shelters }: BackupAdequacyChartProps) {
       <CardHeader>
         <CardTitle className="text-sidebar-foreground">Backup adequacy</CardTitle>
         <p className="text-xs text-sidebar-foreground/70">
-          Critical-load ride-through with surviving DER vs the {required.toFixed(0)} h required
-          window.
+          Critical-load ride-through with surviving{" "}
+          <span
+            className="underline decoration-dotted underline-offset-2"
+            title="DER — distributed energy resources: the shelter's own solar, battery and generator."
+          >
+            DER
+          </span>{" "}
+          (distributed energy resources) vs the {required.toFixed(0)} h required window.
         </p>
       </CardHeader>
       <CardContent>

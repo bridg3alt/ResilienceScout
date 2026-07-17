@@ -4,7 +4,7 @@ import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
 import { Bot, Loader2 } from "lucide-react";
-import { api, type CopilotResponse } from "../lib/api";
+import { api, type CopilotResponse, type Phase } from "../lib/api";
 
 const SUGGESTIONS = [
   "Which shelter should we reinforce first, and why?",
@@ -12,20 +12,27 @@ const SUGGESTIONS = [
   "How long can the clinic annexe run on stored energy?",
 ];
 
+interface CopilotPanelProps {
+  siteId: string;
+  phase: Phase;
+}
+
 /** Grounded copilot. Answers come from the backend's RAG pipeline over live model output. */
-export function CopilotPanel() {
+export function CopilotPanel({ siteId, phase }: CopilotPanelProps) {
   const [question, setQuestion] = useState(SUGGESTIONS[0]);
   const [answer, setAnswer] = useState<CopilotResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showSources, setShowSources] = useState(false);
 
   const ask = async () => {
     if (!question.trim()) return;
     setLoading(true);
     setError(null);
     setAnswer(null);
+    setShowSources(false);
     try {
-      setAnswer(await api.copilot(question));
+      setAnswer(await api.copilot(siteId, phase, question));
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -83,18 +90,34 @@ export function CopilotPanel() {
         {answer && (
           <div className="space-y-2 rounded-lg border border-sidebar-border/30 bg-sidebar-accent/30 p-3">
             <p className="whitespace-pre-wrap text-sm text-sidebar-foreground">{answer.answer}</p>
-            <div className="flex flex-wrap items-center gap-2 border-t border-sidebar-border/30 pt-2">
-              <Badge variant="outline" className="text-xs">
-                {answer.llm}
-              </Badge>
-              <Badge variant="outline" className="text-xs">
-                retrieval: {answer.retrieval}
-              </Badge>
-              {answer.sources.map((s) => (
-                <Badge key={s} variant="secondary" className="text-xs">
-                  {s}
-                </Badge>
-              ))}
+            <div className="space-y-2 border-t border-sidebar-border/30 pt-2">
+              <div className="flex flex-wrap items-center gap-2 text-xs text-sidebar-foreground/70">
+                <span>
+                  Answered using live shelter data + {answer.sources.length} reference{" "}
+                  {answer.sources.length === 1 ? "guideline" : "guidelines"}.
+                </span>
+                <button
+                  onClick={() => setShowSources((v) => !v)}
+                  className="underline underline-offset-2 hover:text-sidebar-foreground"
+                >
+                  {showSources ? "Hide details" : "Details"}
+                </button>
+              </div>
+              {showSources && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="outline" className="text-xs">
+                    {answer.llm}
+                  </Badge>
+                  <Badge variant="outline" className="text-xs">
+                    retrieval: {answer.retrieval}
+                  </Badge>
+                  {answer.sources.map((s) => (
+                    <Badge key={s} variant="secondary" className="text-xs">
+                      {s}
+                    </Badge>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         )}

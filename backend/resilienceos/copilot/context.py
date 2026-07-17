@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from ..building import Building
-from ..hazard import HeatwaveResult, OutageResult, HI_CAUTION, HI_DANGER
+from ..hazard import HeatwaveResult, OutageResult, FloodResult, HI_CAUTION, HI_DANGER
 
 
 def build_context(b: Building, hw: HeatwaveResult, out: OutageResult, score: dict) -> str:
@@ -31,3 +31,54 @@ def build_context(b: Building, hw: HeatwaveResult, out: OutageResult, score: dic
         + f"Estimated backup for critical loads: {out.backup_hours:.1f}h.",
     ]
     return "\n".join(lines)
+
+
+def _shelter_block(name: str, pop_served: int, ceri: dict, flood: FloodResult,
+                   spofs: list, is_focus: bool) -> str:
+    """One grounded paragraph for a single shelter — the flood analogue of build_context."""
+    failed = ", ".join(flood.failed_equipment) if flood.failed_equipment else "none"
+    spof_txt = ", ".join(spofs) if spofs else "none"
+    marker = "  [CURRENTLY SELECTED SHELTER]" if is_focus else ""
+    return (
+        f"{name} (serves {pop_served} people).{marker}\n"
+        f"  CERI (Climate Energy Readiness Index): {ceri['score']}/100 ({ceri['band']}). "
+        f"Sub-scores energy_readiness={ceri['components']['energy_readiness']}, "
+        f"flood_readiness={ceri['components']['flood_readiness']}, "
+        f"backup_duration={ceri['components']['backup_duration']}, "
+        f"critical_vulnerabilities={ceri['components']['critical_vulnerabilities']}.\n"
+        f"  Can carry its critical load: {'YES' if flood.operational else 'NO'}. "
+        f"Backup {flood.backup_hours:.1f}h available vs {flood.required_backup_h:.0f}h required. "
+        f"Surviving DER: {flood.surviving_der['solar_kwp']:.0f} kWp solar, "
+        f"{flood.surviving_der['battery_kwh']:.0f} kWh battery, "
+        f"generator={'yes' if flood.surviving_der['has_generator'] else 'no'}.\n"
+        f"  Flooded/offline equipment: {failed}. "
+        f"Single points of failure (lose it and the shelter goes dark): {spof_txt}."
+        + (f"\n  Why it fails: {flood.failure_reason}." if flood.failure_reason else "")
+    )
+
+
+def build_flood_context(shelters: list[dict], focus_site_id: str,
+                        phase: str, flood_depth_m: float) -> str:
+    """
+    Grounding context for the FLOOD copilot, mirroring build_context's contract.
+
+    `shelters` is a list of already-computed dicts (one per shelter), each with:
+      id, name, pop_served, ceri (engine.ceri_score output), flood (hazard.FloodResult),
+      spofs (list[str]).
+    Grounds in EVERY shelter so cross-shelter questions ("which should we reinforce first")
+    and single-site questions both resolve against real Block A/B/C numbers — never the
+    heatwave stub.
+    """
+    header = (
+        f"Scenario: {phase.replace('_', ' ')} phase, assessed against a "
+        f"{flood_depth_m:.1f} m flood. All numbers below are live model output for the "
+        f"real emergency shelters; ground every answer in them and name the specific shelters."
+    )
+    blocks = [
+        _shelter_block(
+            s["name"], s["pop_served"], s["ceri"], s["flood"], s["spofs"],
+            is_focus=(s["id"] == focus_site_id),
+        )
+        for s in shelters
+    ]
+    return header + "\n\n" + "\n\n".join(blocks)
