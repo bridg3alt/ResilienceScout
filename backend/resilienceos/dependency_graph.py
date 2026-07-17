@@ -67,10 +67,12 @@ def _asset_present(asset: str, building) -> bool:
     return True
 
 
-def build_graph(site: dict, building, flood=None) -> dict:
+def build_graph(site: dict, building, flood=None, repaired=frozenset()) -> dict:
     """
     site: a presets.SHELTERS entry. building: the resilienceos Building for that site.
     flood: an optional hazard.FloodResult — when given, every node carries a health status.
+    repaired: assets restored in the recovery phase — forced to "ok" health regardless of the
+    water line, so the post-flood map shows them mended.
     """
     present = [a for a in _TIERS if a == "shelter" or _asset_present(a, building)]
     nodes = [
@@ -79,7 +81,7 @@ def build_graph(site: dict, building, flood=None) -> dict:
             "label": _LABELS[a],
             "tier": _TIERS[a],
             "elevation_m": presets.EQUIPMENT_ELEVATION_M.get(a),
-            "health": node_health(a, flood) if flood is not None else "unknown",
+            "health": ("ok" if a in repaired else node_health(a, flood)) if flood is not None else "unknown",
             "is_power_source": a in POWER_SOURCES,
         }
         for a in present

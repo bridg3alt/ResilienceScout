@@ -27,7 +27,7 @@ const HEALTH_LABEL: Record<Health, string> = {
   unknown: "Not assessed",
 };
 
-const NODE_W = 150;
+const NODE_W = 182;
 const NODE_H = 46;
 const COL_GAP = 90;
 const ROW_GAP = 18;
@@ -85,7 +85,10 @@ export function DependencyMap({ graph }: DependencyMapProps) {
                 {HEALTH_LABEL[h]}
               </span>
             ))}
-            <span className="flex items-center gap-1.5">
+            <span
+              className="flex items-center gap-1.5"
+              title="Single point of failure (SPOF): one asset whose loss alone takes the whole shelter dark, no matter what else survives."
+            >
               <span className="size-2.5 rounded-full ring-2 ring-red-400 ring-offset-1 ring-offset-transparent" />
               ringed = single point of failure
             </span>
@@ -152,9 +155,10 @@ export function DependencyMap({ graph }: DependencyMapProps) {
                       strokeWidth={isSpof ? 2.5 : 1.5}
                       strokeDasharray={isSpof ? "5 3" : undefined}
                     />
+                    <title>{n.label}</title>
                     <circle cx={14} cy={NODE_H / 2} r={5} fill={fill} />
                     <text x={28} y={NODE_H / 2 + 4} fontSize={12} fill="currentColor" className="fill-sidebar-foreground">
-                      {n.label.length > 17 ? `${n.label.slice(0, 16)}…` : n.label}
+                      {n.label.length > 24 ? `${n.label.slice(0, 23)}…` : n.label}
                     </text>
                   </g>
                 );

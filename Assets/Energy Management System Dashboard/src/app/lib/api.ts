@@ -192,6 +192,6 @@ export const api = {
     get<ShelterStatusResponse>(`/api/shelters/status?phase=${phase}`),
   ceriTrend: (siteId: string) => get<CeriTrendResponse>(`/api/ceri-trend/${siteId}`),
   recovery: (phase: Phase) => post<RecoveryResponse>("/api/recovery/prioritize", { phase }),
-  copilot: (question: string, multiagent = false) =>
-    post<CopilotResponse>("/copilot", { building: {}, question, multiagent }),
+  copilot: (siteId: string, phase: Phase, question: string, multiagent = false) =>
+    post<CopilotResponse>("/api/copilot", { site_id: siteId, phase, question, multiagent }),
 };

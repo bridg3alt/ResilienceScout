@@ -84,6 +84,7 @@ def analyze_flood(
     day: pd.DataFrame,
     flood_depth_m: float,
     start_hour: int = 14,
+    repaired: frozenset[str] = frozenset(),
 ) -> FloodResult:
     """
     Flood hazard: water above an asset's mounting height takes that asset offline, and the
@@ -93,8 +94,12 @@ def analyze_flood(
     balance: the flood only decides WHICH resources exist, and the existing solar+battery model
     decides how long they last. Roof PV panels survive but their ground-level inverter usually
     does not, which is why elevation is tracked per-asset.
+
+    `repaired` names assets that have been restored (the post-flood "recovery" phase): they are
+    treated as dry, so their capability comes back and the shelter is re-scored on the mended
+    resource set. Empty by default, so every existing caller is unaffected.
     """
-    failed = presets.flooded_equipment(flood_depth_m)
+    failed = [a for a in presets.flooded_equipment(flood_depth_m) if a not in repaired]
 
     # Apply each drowned asset's effect to a copy of the Building, then let the existing
     # energy-balance model run against the degraded resource set.

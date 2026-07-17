@@ -88,10 +88,10 @@ export function Sidebar({ currentPage, onPageChange }: SidebarProps) {
           {isExpanded && (
             <div className="mt-3 text-center">
               <h2 className="text-sidebar-foreground font-semibold text-base whitespace-nowrap">
-                EMS Control
+                ResilienceScout
               </h2>
               <p className="text-sidebar-foreground/70 text-xs whitespace-nowrap mt-1">
-                Energy Management
+                Flood energy readiness
               </p>
             </div>
           )}
