@@ -26,7 +26,7 @@ _TIERS = {
     "shelter": 0,
     "distribution_panel": 1, "comms": 1,
     "transformer": 2, "battery": 2, "solar_inverter": 2, "generator": 2,
-    "solar_panels": 3, "road_access": 3,
+    "solar_panels": 3, "road_access": 3, "substation": 3,
 }
 
 _LABELS = {
@@ -39,12 +39,23 @@ _LABELS = {
     "generator": "Generator",
     "road_access": "Road access",
     "comms": "Communications",
+    "substation": "Campus substation (11 kV)",
 }
 
 # provider -> dependents. Every power source feeds the shelter THROUGH the distribution panel:
 # that is what makes the panel a genuine single point of failure, and modelling sources as
 # wiring straight into the shelter would hide it.
 _DEPENDENCIES = [
+    # SOURCED: the site survey confirmed the campus 11 kV substation is the grid feed for this
+    # block, upstream of its 250 kVA transformer. Modelled now that the connection is confirmed;
+    # before the survey it was deliberately left out rather than assumed.
+    # Consequence: the grid path is only alive if BOTH substation and transformer are alive, so
+    # losing the substation drops the grid but not the shelter — battery/solar/generator still
+    # carry it. That is the graph earning its keep rather than a checklist.
+    # TODO(user): the substation's elevation was not surveyed, so it has no entry in
+    # EQUIPMENT_ELEVATION_M and therefore never floods in the model. Measure it — a substation
+    # below the water line would take the grid out earlier than the model currently shows.
+    ("substation", "transformer"),
     ("transformer", "distribution_panel"),
     ("battery", "distribution_panel"),
     ("solar_inverter", "distribution_panel"),

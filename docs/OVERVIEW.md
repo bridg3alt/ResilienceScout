@@ -91,6 +91,21 @@ Every response carries `placeholder: true` while `DATA_IS_PLACEHOLDER` is set.
 
 The method is demonstrable; the numbers are not. This is the honest split.
 
+**Current state after the site survey.** Equipment elevations, DER nameplate and critical load
+are measured. The **2018 flood line is now observed** (0.78 m above finished floor at the
+Decennial Block electrical room entrance), so `FLOOD_LINE_M` is sourced rather than guessed, and
+the ground-to-floor step (0.18 m) makes above-grade readings convertible.
+
+Still invented: the **design scenario ladder** (`FLOOD_SCENARIOS_M` — one observed point does not
+give return periods), `pop_served`, the survey uncertainty, and three elevations. So
+`DATA_IS_PLACEHOLDER` stays `True`.
+
+Because the two sides are now mixed, the vertical **datum** is enforced rather than assumed:
+every elevation is metres above finished floor level, and any external figure must be converted
+through `presets.depth_above_floor()`, which raises instead of guessing when the finished floor
+level is unsurveyed. `POST /api/observations` requires an explicit `datum` and returns 400 for a
+reading it cannot honestly convert. See `docs/SURVEY.md` §3 for what closes this.
+
 ### Real
 
 - **Digital twin physics.** 5R1C ISO-13790 via `rcbsim` (Jayathissa et al., *Applied Energy*

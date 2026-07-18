@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Badge } from "./ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
-import type { RecoveryResponse } from "../lib/api";
+import { Wrench, ArrowRight } from "lucide-react";
+import type { RecoveryResponse, RecoveryRow } from "../lib/api";
 
 interface RecoveryPrioritizationProps {
   recovery: RecoveryResponse;
@@ -10,22 +10,29 @@ interface RecoveryPrioritizationProps {
 /**
  * Post-flood repair order.
  *
- * Rows are shelters, not individual assets: in a severe flood no single repair re-powers
- * anything on its own, so each row carries the minimum SET of repairs that actually restores
- * that shelter, and credits its population only to that complete set.
+ * The unit of decision is the minimum SET of repairs that actually re-powers a shelter — in a
+ * severe flood no single repair does it alone. The interesting half is what the search chose NOT
+ * to repair: a flooded transformer is a real failure that can be both the most expensive job on
+ * the list and worth nothing, because every source is wired through the distribution panel.
+ * Showing the deferred assets WITH their cost is what makes that an argument the reader can
+ * check rather than an assertion.
+ *
+ * With several shelters the rows also rank against each other by people-restored-per-repair-hour;
+ * with one that comparison is meaningless, so it is hidden rather than shown as a lone "#1".
  */
 export function RecoveryPrioritization({ recovery }: RecoveryPrioritizationProps) {
   const { ranked, total_population_restorable, total_effort_h } = recovery;
+  const comparing = ranked.length > 1;
 
   if (ranked.length === 0) {
     return (
       <Card className="border-sidebar-border/30 bg-gradient-to-br from-sidebar via-sidebar to-sidebar-accent">
         <CardHeader>
-          <CardTitle className="text-sidebar-foreground">Recovery prioritisation</CardTitle>
+          <CardTitle className="text-sidebar-foreground">Repair plan</CardTitle>
         </CardHeader>
         <CardContent>
           <p className="text-sm text-sidebar-foreground/70">
-            No shelter has lost power at this flood depth, so there is nothing to prioritise.
+            Nothing has lost power at this flood depth, so there is nothing to repair.
           </p>
         </CardContent>
       </Card>
@@ -35,61 +42,100 @@ export function RecoveryPrioritization({ recovery }: RecoveryPrioritizationProps
   return (
     <Card className="border-sidebar-border/30 bg-gradient-to-br from-sidebar via-sidebar to-sidebar-accent">
       <CardHeader>
-        <CardTitle className="text-sidebar-foreground">Recovery prioritisation</CardTitle>
+        <CardTitle className="text-sidebar-foreground">
+          {comparing ? "Repair plan — which shelter first" : "Repair plan"}
+        </CardTitle>
         <p className="text-xs text-sidebar-foreground/70">
-          Ranked by people restored per repair-hour. {total_population_restorable.toLocaleString()}{" "}
-          people restorable across {total_effort_h.toFixed(0)} repair-hours.
+          {comparing
+            ? `Ranked by people restored per repair-hour. ${total_population_restorable.toLocaleString()} people restorable across ${total_effort_h.toFixed(0)} repair-hours.`
+            : "The smallest set of repairs that turns the power back on — and what it is safe to leave until later."}
         </p>
       </CardHeader>
-      <CardContent>
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-12">#</TableHead>
-                <TableHead>Shelter</TableHead>
-                <TableHead>Minimum repair set</TableHead>
-                <TableHead className="text-right">Effort</TableHead>
-                <TableHead className="text-right">People restored</TableHead>
-                <TableHead className="text-right">People / hour</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {ranked.map((r) => (
-                <TableRow key={r.site_id}>
-                  <TableCell>
-                    <Badge
-                      variant={r.rank === 1 ? "default" : "outline"}
-                      className="tabular-nums"
-                    >
-                      {r.rank}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="font-medium">{r.site_name}</TableCell>
-                  <TableCell>
-                    <div className="flex flex-wrap gap-1">
-                      {r.repair_labels.map((l) => (
-                        <Badge key={l} variant="secondary" className="text-xs">
-                          {l}
-                        </Badge>
-                      ))}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {r.repair_effort_h.toFixed(0)} h
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {r.population_restored.toLocaleString()}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums font-medium">
-                    {r.pop_per_effort_h.toFixed(1)}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+      <CardContent className="space-y-6">
+        {ranked.map((r) => (
+          <RepairArgument key={r.site_id} row={r} comparing={comparing} />
+        ))}
       </CardContent>
     </Card>
+  );
+}
+
+function RepairArgument({ row, comparing }: { row: RecoveryRow; comparing: boolean }) {
+  return (
+    <div className="space-y-3">
+      {comparing && (
+        <div className="flex items-center gap-2">
+          <Badge variant={row.rank === 1 ? "default" : "outline"} className="tabular-nums">
+            #{row.rank}
+          </Badge>
+          <span className="text-sm font-medium text-sidebar-foreground">{row.site_name}</span>
+          <span className="text-xs text-sidebar-foreground/60 tabular-nums">
+            {row.pop_per_effort_h.toFixed(1)} people/hour
+          </span>
+        </div>
+      )}
+
+      {/* 1. The recommendation. */}
+      <div className="rounded-xl border border-sidebar-primary/40 bg-sidebar-primary/10 px-4 py-3">
+        <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-sidebar-foreground/70">
+          <Wrench className="size-3.5" /> Do this first
+        </div>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          {row.repair_labels.map((l) => (
+            <Badge key={l} className="text-xs">
+              {l}
+            </Badge>
+          ))}
+          <span className="text-sm font-semibold text-sidebar-foreground tabular-nums">
+            {row.repair_effort_h.toFixed(0)} h total
+          </span>
+        </div>
+        {row.services_restored.length > 0 && (
+          <div className="mt-2 flex items-center gap-1.5 text-xs text-sidebar-foreground/70">
+            <ArrowRight className="size-3" />
+            restores {row.services_restored.join(", ")}
+          </div>
+        )}
+      </div>
+
+      {/* 2. What it is correct NOT to do — the half a damage report cannot give you. */}
+      {row.deferred.length > 0 && (
+        <div className="rounded-xl border border-sidebar-border/40 px-4 py-3">
+          <div className="text-xs uppercase tracking-wide text-sidebar-foreground/60">
+            Also flooded — but not needed to restore power
+          </div>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {row.deferred.map((d) => (
+              <Badge key={d.id} variant="outline" className="text-xs tabular-nums">
+                {d.label} · {d.effort_h.toFixed(0)} h
+              </Badge>
+            ))}
+          </div>
+          <p className="mt-2 text-xs text-sidebar-foreground/60">
+            These still need fixing eventually, but the shelter is powered without them — so
+            they do not belong in the first repair window.
+          </p>
+        </div>
+      )}
+
+      {/* 3. The comparison the minimum set is beating. */}
+      {row.effort_saved_h > 0 && (
+        <p className="text-xs text-sidebar-foreground/70">
+          Repairing everything that flooded would take{" "}
+          <span className="tabular-nums font-medium">{row.full_repair_effort_h.toFixed(0)} h</span>.
+          Working out what actually carries the power finds the{" "}
+          <span className="tabular-nums font-medium">{row.repair_effort_h.toFixed(0)} h</span>{" "}
+          that matters — <span className="tabular-nums font-medium">{row.effort_saved_h.toFixed(0)} h</span>{" "}
+          deferred without leaving anyone in the dark.
+        </p>
+      )}
+
+      {!row.achievable && (
+        <p className="text-xs text-destructive">
+          No repair set restores power at this depth — the shelter cannot be brought back until
+          the water drops.
+        </p>
+      )}
+    </div>
   );
 }

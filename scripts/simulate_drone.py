@@ -28,10 +28,22 @@ STEP_M = 0.1           # rise per reading
 INTERVAL_S = 3.0       # seconds between readings
 
 
+# The datum this fake sensor reports in. It claims above-finished-floor because that is the one
+# datum the model can use without a survey constant, which keeps the demo runnable.
+#
+# REAL hardware will NOT be this convenient: a drone altimeter reports above mean sea level
+# ("above_msl_m"), a staff gauge reports above external ground ("above_external_ground_m"). Both
+# are REJECTED with 400 until the finished floor level is surveyed (presets.FINISHED_FLOOR_LEVEL_MSL_M
+# / GROUND_TO_FLOOR_STEP_M). That rejection is correct and intended — this script stands in for
+# the telemetry, not for the survey, and it must not paper over the missing measurement.
+DATUM = "above_finished_floor_m"
+
+
 def post(depth_m: float) -> None:
     body = json.dumps({
         "site_id": SITE_ID,
         "flood_depth_m": round(depth_m, 2),
+        "datum": DATUM,
         "source": "simulated_drone",
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }).encode()

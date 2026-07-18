@@ -22,19 +22,27 @@ import itertools
 from . import presets
 from .dependency_graph import downstream, shelter_powered
 
-# Indicative repair effort per asset (person-hours). Cheap proxy for "how hard to fix".
-# TODO(user): replace with real crew estimates from the campus maintenance team.
+# Repair effort per asset (person-hours). Cheap proxy for "how hard to fix".
+#
+# SOURCED — replaced with the campus maintenance team's own estimates during the site survey.
+# These reorder the recovery ranking materially versus the previous guesses: the transformer is
+# far worse than assumed (48 h, not 24) while solar panels are far cheaper (4 h, not 12), so
+# plans that lean on grid restoration now score much worse against plans that restore local
+# generation first.
 REPAIR_EFFORT_H = {
-    "transformer": 24.0,
-    "distribution_panel": 8.0,
-    "battery": 6.0,
-    "solar_inverter": 4.0,
-    "solar_panels": 12.0,
-    "generator": 10.0,
-    "road_access": 16.0,
-    "comms": 3.0,
+    "comms": 3.0,               # SOURCED
+    "solar_panels": 4.0,        # SOURCED: midpoint of the team's 3–5 h range
+    "solar_inverter": 6.0,      # SOURCED
+    "distribution_panel": 8.0,  # SOURCED (revised up from an earlier 5.0)
+    "road_access": 8.0,         # SOURCED (revised down from an earlier 10.0)
+    "battery": 10.0,            # SOURCED (revised up from an earlier 8.0)
+    "generator": 12.0,          # SOURCED
+    "transformer": 48.0,        # SOURCED: the long pole by a wide margin
 }
 
+# TODO(user): the substation node has no surveyed repair estimate, so it falls through to the
+# default below. A grid asset that big is unlikely to be an 8 h job — get a real figure before
+# any plan leans on restoring it.
 _DEFAULT_EFFORT_H = 8.0
 
 
@@ -92,7 +100,11 @@ def prioritize(graphs: list[dict], failed_by_site: dict[str, list[str]],
 
     for graph in graphs:
         site_id = graph["site_id"]
-        failed = set(failed_by_site.get(site_id, []))
+        # The shelter node reports "failed" when it is unpowered, but it is the OUTCOME of the
+        # graph, not an asset anyone repairs. Left in, it pollutes the failure list and picks up
+        # the default effort, so the plan would offer "repair the shelter, 8h" as if that were a
+        # job. Drop it: repairs act on the assets that feed the shelter.
+        failed = set(failed_by_site.get(site_id, [])) - {"shelter"}
         if not failed:
             continue
 
@@ -104,12 +116,30 @@ def prioritize(graphs: list[dict], failed_by_site: dict[str, list[str]],
         effort = plan["effort_h"]
         labels = {n["id"]: n["label"] for n in graph["nodes"]}
 
+        # What the search decided NOT to repair, and what that decision is worth.
+        #
+        # This is the whole argument, and it is the half a damage report cannot make: a flooded
+        # transformer is a real failure, but repairing it can be both the most expensive job on
+        # the list and worth nothing, because every source is wired through the distribution
+        # panel. Naming the deferred assets WITH their cost is what turns the minimum repair set
+        # from an assertion into a comparison the reader can check.
+        deferred_ids = sorted(failed - set(plan["repairs"]))
+        deferred = [
+            {"id": d, "label": labels.get(d, d), "effort_h": _effort(d)}
+            for d in deferred_ids
+        ]
+        full_effort = round(sum(_effort(f) for f in failed), 1)
+
         ranked.append({
             "site_id": site_id,
             "site_name": graph["site_name"],
             "repairs": plan["repairs"],
             "repair_labels": [labels.get(r, r) for r in plan["repairs"]],
             "repair_effort_h": effort,
+            "deferred_repairs": deferred_ids,
+            "deferred": deferred,
+            "full_repair_effort_h": full_effort,
+            "effort_saved_h": round(full_effort - effort, 1),
             "population_restored": pop if plan["achievable"] else 0,
             "pop_per_effort_h": round(pop / effort, 2) if effort and plan["achievable"] else 0.0,
             "achievable": plan["achievable"],

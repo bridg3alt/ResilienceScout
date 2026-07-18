@@ -369,6 +369,11 @@ def api_copilot(inp: FloodCopilotIn):
 class ObservationIn(BaseModel):
     site_id: str
     flood_depth_m: float
+    # REQUIRED, deliberately no default: the sender must say what its reading is measured
+    # against. A drone altimeter reports above mean sea level, a staff gauge reports above
+    # external ground, and this model works in metres above finished floor. Defaulting the datum
+    # would be the exact silent mismatch this field exists to prevent.
+    datum: str
     source: str = "sensor"
     timestamp: str | None = None
 
@@ -383,11 +388,25 @@ def api_post_observation(inp: ObservationIn):
     Until then scripts/simulate_drone.py stands in for it. Once a reading exists, the whole
     dashboard scores against it (see `_effective_depth`) instead of the fixed phase-based guess,
     so the numbers track the real water with zero manual entry.
+
+    The reading is converted into the model's datum (metres above finished floor) before storage.
+    If that conversion needs a survey constant that has not been measured yet, the reading is
+    REJECTED with 400 rather than stored at face value — a loud failure beats a plausible wrong
+    number, because a datum error is invisible in the output.
     """
     presets.get_shelter(inp.site_id)  # 404 on unknown site
+    try:
+        depth_above_floor = presets.depth_above_floor(inp.flood_depth_m, inp.datum)
+    except presets.DatumError as e:
+        raise HTTPException(400, str(e))
+
     reading = {
         "site_id": inp.site_id,
-        "flood_depth_m": inp.flood_depth_m,
+        "flood_depth_m": depth_above_floor,       # converted, in ELEVATION_DATUM
+        "datum": presets.ELEVATION_DATUM,
+        # Provenance: keep what the sensor actually said, so a conversion can be audited later.
+        "raw_reading_m": inp.flood_depth_m,
+        "raw_datum": inp.datum,
         "source": inp.source,
         "timestamp": inp.timestamp,
     }

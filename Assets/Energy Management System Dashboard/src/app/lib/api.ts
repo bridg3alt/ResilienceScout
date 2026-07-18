@@ -110,12 +110,25 @@ export interface ShelterStatusResponse {
   placeholder: boolean;
 }
 
+/** A failed asset the search deliberately did NOT include in the minimum repair set. */
+export interface DeferredRepair {
+  id: string;
+  label: string;
+  effort_h: number;
+}
+
 export interface RecoveryRow {
   site_id: string;
   site_name: string;
   repairs: string[];
   repair_labels: string[];
   repair_effort_h: number;
+  /** Failed but not required to re-power the shelter, each with the cost avoided. */
+  deferred_repairs: string[];
+  deferred: DeferredRepair[];
+  /** Effort to repair everything that failed — the comparison the minimum set is beating. */
+  full_repair_effort_h: number;
+  effort_saved_h: number;
   population_restored: number;
   pop_per_effort_h: number;
   achievable: boolean;

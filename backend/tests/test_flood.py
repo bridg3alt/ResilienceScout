@@ -47,18 +47,22 @@ def test_flooded_equipment_is_elevation_ordered():
 
 def test_roof_panels_survive_while_their_ground_inverter_drowns():
     """
-    The whole reason elevation is tracked per-asset rather than per-building: at 1.2 m the
+    The whole reason elevation is tracked per-asset rather than per-building: at 1.9 m the
     roof-mounted array is untouched but the inverter it feeds is underwater, so the PV
     contributes nothing. A building-level flood flag cannot represent this.
+
+    Depth raised from 1.2 m to 1.9 m when the survey measured the inverter at 1.85 m (it had
+    been estimated at 1.2 m). The property under test is unchanged; the real inverter simply
+    sits higher than the guess did.
     """
-    failed = presets.flooded_equipment(1.2)
+    failed = presets.flooded_equipment(1.9)
     assert "solar_inverter" in failed
     assert "solar_panels" not in failed
 
 
 def test_flood_zeroes_only_the_der_that_actually_drowned(building, mild_day):
     dry = analyze_flood(building, mild_day, 0.0)
-    wet = analyze_flood(building, mild_day, 0.4)   # battery at 0.3 m is under; inverter is not
+    wet = analyze_flood(building, mild_day, 0.5)   # battery at 0.45 m is under; inverter is not
     assert "battery" in wet.failed_equipment
     assert wet.surviving_der["battery_kwh"] == 0.0
     assert wet.surviving_der["solar_kwp"] == dry.surviving_der["solar_kwp"]
@@ -76,7 +80,7 @@ def test_analyze_flood_reuses_the_energy_balance(building, mild_day):
     flood-specific reimplementation.
     """
     dry = analyze_flood(building, mild_day, 0.0)
-    wet = analyze_flood(building, mild_day, 0.4)
+    wet = analyze_flood(building, mild_day, 0.5)   # surveyed battery height is 0.45 m
     assert wet.backup_hours < dry.backup_hours
 
 
@@ -177,13 +181,16 @@ def test_restoration_plan_requires_the_panel_plus_a_source(graph):
 
 def test_restoration_plan_picks_the_cheapest_viable_source(graph):
     """
-    Exhaustive search must select the solar inverter (4h) over the transformer (24h). A greedy
+    Exhaustive search must select the solar inverter (6h) over the transformer (48h). A greedy
     pass that grabbed the highest-capacity asset would pick wrong here.
+
+    Efforts are the surveyed maintenance-team estimates, which widened this gap considerably
+    (the transformer went 24h -> 48h, so the cheap-source choice is now even more clearly right).
     """
     failed = {"transformer", "battery", "solar_inverter", "generator", "distribution_panel"}
     plan = restoration_plan(graph, failed)
     assert set(plan["repairs"]) == {"distribution_panel", "solar_inverter"}
-    assert plan["effort_h"] == pytest.approx(12.0)
+    assert plan["effort_h"] == pytest.approx(14.0)   # panel 8.0 + inverter 6.0
 
 
 def test_recovery_ranks_by_population_per_effort_hour(mild_day):
@@ -194,7 +201,10 @@ def test_recovery_ranks_by_population_per_effort_hour(mild_day):
     """
     site = presets.get_shelter("decennial_block")
     b = Building(**site["building"])
-    fl = analyze_flood(b, mild_day, 1.3)
+    # 1.7 m, not 1.3 m: with the surveyed elevations the distribution panel sits at 1.60 m, and
+    # until IT goes under the shelter is still powered by the (higher) solar inverter — so at
+    # 1.3 m there is nothing to prioritise and the ranking is empty.
+    fl = analyze_flood(b, mild_day, 1.7)
 
     graphs, failed_by_site, pop_served = [], {}, {}
     for sid, pop in (("big", 500), ("small", 150)):
@@ -208,6 +218,34 @@ def test_recovery_ranks_by_population_per_effort_hour(mild_day):
     assert order.index("big") < order.index("small")
     assert out["ranked"][0]["rank"] == 1
     assert out["placeholder"] is presets.DATA_IS_PLACEHOLDER
+
+
+def test_deferred_repairs_are_the_failures_the_plan_deliberately_skips(mild_day):
+    """
+    The argument the Recovery page makes: what was flooded, what must be fixed to restore power,
+    and what it is therefore correct to defer. Deferred and required must partition the failures.
+    """
+    site = presets.get_shelter("decennial_block")
+    b = Building(**site["building"])
+    fl = analyze_flood(b, mild_day, 1.7)   # deep enough to take the distribution panel down
+    g = build_graph(site, b, fl)
+    failed = sorted(n["id"] for n in g["nodes"] if n["health"] == "failed")
+
+    row = prioritize([g], {site["id"]: failed})["ranked"][0]
+
+    # partition: nothing counted twice, nothing dropped
+    assert set(row["repairs"]) & set(row["deferred_repairs"]) == set()
+    assert set(row["repairs"]) | set(row["deferred_repairs"]) == set(row["all_failed"])
+
+    # the saving is real and consistent
+    assert row["full_repair_effort_h"] >= row["repair_effort_h"]
+    assert row["effort_saved_h"] == pytest.approx(
+        row["full_repair_effort_h"] - row["repair_effort_h"]
+    )
+
+    # every deferred asset carries the cost avoided, so the UI can show the comparison
+    assert all(d["effort_h"] > 0 for d in row["deferred"])
+    assert {d["id"] for d in row["deferred"]} == set(row["deferred_repairs"])
 
 
 def test_recovery_does_not_credit_population_to_a_repair_that_restores_nothing(graph):
