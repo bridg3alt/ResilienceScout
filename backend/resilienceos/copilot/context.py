@@ -48,7 +48,8 @@ def _shelter_block(name: str, pop_served: int, ceri: dict, flood: FloodResult,
         f"critical_vulnerabilities={ceri['components']['critical_vulnerabilities']}.\n"
         f"  Can carry its critical load: {'YES' if flood.operational else 'NO'}. "
         f"Backup {flood.backup_hours:.1f}h available vs {flood.required_backup_h:.0f}h required. "
-        f"Surviving DER: {flood.surviving_der['solar_kwp']:.0f} kWp solar, "
+        f"Surviving on-site energy (DER — solar/battery/generator): "
+        f"{flood.surviving_der['solar_kwp']:.0f} kWp solar, "
         f"{flood.surviving_der['battery_kwh']:.0f} kWh battery, "
         f"generator={'yes' if flood.surviving_der['has_generator'] else 'no'}.\n"
         f"  Flooded/offline equipment: {failed}. "
@@ -65,9 +66,8 @@ def build_flood_context(shelters: list[dict], focus_site_id: str,
     `shelters` is a list of already-computed dicts (one per shelter), each with:
       id, name, pop_served, ceri (engine.ceri_score output), flood (hazard.FloodResult),
       spofs (list[str]).
-    Grounds in EVERY shelter so cross-shelter questions ("which should we reinforce first")
-    and single-site questions both resolve against real Block A/B/C numbers — never the
-    heatwave stub.
+    Grounds in the real modelled building(s) so every question resolves against surveyed-shape
+    live numbers (CERI, backup, dependency graph) — never the heatwave stub.
     """
     header = (
         f"Scenario: {phase.replace('_', ' ')} phase, assessed against a "
