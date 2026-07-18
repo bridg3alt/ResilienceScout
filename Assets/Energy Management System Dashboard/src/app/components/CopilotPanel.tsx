@@ -7,9 +7,9 @@ import { Bot, Loader2 } from "lucide-react";
 import { api, type CopilotResponse, type Phase } from "../lib/api";
 
 const SUGGESTIONS = [
-  "Which shelter should we reinforce first, and why?",
-  "What happens to Block A if the transformer floods?",
-  "How long can the clinic annexe run on stored energy?",
+  "What should we reinforce first at this building, and why?",
+  "What happens to the Decennial Block if the transformer floods?",
+  "How long can it run on stored energy during the flood?",
 ];
 
 interface CopilotPanelProps {

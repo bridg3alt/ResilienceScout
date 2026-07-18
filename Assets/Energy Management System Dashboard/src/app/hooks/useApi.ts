@@ -15,8 +15,13 @@ export interface ApiState<T> {
  *
  * `deps` drives refetching (e.g. the selected site or phase). Stale responses are discarded
  * so a slow earlier request can't overwrite a newer one.
+ *
+ * `pollMs` (optional) enables live updates: every `pollMs` ms the data is refetched SILENTLY —
+ * `loading` is never toggled and errors from a poll are swallowed — so panels update in place
+ * with no spinner flicker. This is how the dashboard tracks live flood telemetry with zero
+ * clicks. The initial deps-driven fetch still shows loading/errors normally.
  */
-export function useApi<T>(fetcher: () => Promise<T>, deps: unknown[]): ApiState<T> {
+export function useApi<T>(fetcher: () => Promise<T>, deps: unknown[], pollMs?: number): ApiState<T> {
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -24,6 +29,7 @@ export function useApi<T>(fetcher: () => Promise<T>, deps: unknown[]): ApiState<
 
   const reload = useCallback(() => setNonce((n) => n + 1), []);
 
+  // Initial + deps/reload-driven fetch: shows loading and surfaces errors.
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -47,6 +53,26 @@ export function useApi<T>(fetcher: () => Promise<T>, deps: unknown[]): ApiState<
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [...deps, nonce]);
+
+  // Silent background polling: refresh data in place, never flip loading, ignore transient errors.
+  useEffect(() => {
+    if (!pollMs) return;
+    let cancelled = false;
+    const id = setInterval(() => {
+      fetcher()
+        .then((d) => {
+          if (!cancelled) setData(d);
+        })
+        .catch(() => {
+          /* transient poll failure: keep the last good data, don't blank the screen */
+        });
+    }, pollMs);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [...deps, pollMs]);
 
   return { data, loading, error, reload };
 }

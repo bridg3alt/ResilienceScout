@@ -18,9 +18,11 @@ interface OverviewProps {
 }
 
 export function Overview({ phase, sites, selectedId, onSelect }: OverviewProps) {
-  const ceri = useApi(() => api.ceri(selectedId, phase), [selectedId, phase]);
+  // Poll CERI + status every 3s so the headline readiness tracks live flood readings; the trend
+  // is a fixed hazard-severity sweep, so it doesn't poll.
+  const ceri = useApi(() => api.ceri(selectedId, phase), [selectedId, phase], 3000);
   const trend = useApi(() => api.ceriTrend(selectedId), [selectedId]);
-  const status = useApi(() => api.shelterStatus(phase), [phase]);
+  const status = useApi(() => api.shelterStatus(phase), [phase], 3000);
 
   return (
     <div className="space-y-4">

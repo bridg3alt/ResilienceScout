@@ -24,7 +24,7 @@ from resilienceos.recovery import restoration_plan, prioritize
 
 @pytest.fixture
 def site():
-    return presets.get_shelter("block_a")
+    return presets.get_shelter("decennial_block")
 
 
 @pytest.fixture
@@ -92,7 +92,7 @@ def test_distribution_panel_is_a_single_point_of_failure(graph):
 
 
 def test_a_redundant_source_is_not_a_single_point_of_failure(graph):
-    """Block A has battery + solar + generator, so losing the transformer alone is survivable."""
+    """Building has battery + solar + generator, so losing the transformer alone is survivable."""
     assert "transformer" not in single_points_of_failure(graph)
     assert shelter_powered(graph, {"transformer"}) is True
 
@@ -114,9 +114,10 @@ def test_comms_never_gates_power(graph):
 
 
 def test_graph_only_contains_assets_the_shelter_actually_has():
-    """Block B has no battery and no generator — they must not appear as repairable nodes."""
-    site = presets.get_shelter("block_b")
-    g = build_graph(site, Building(**site["building"]))
+    """A solar-only building has no battery and no generator — they must not appear as nodes."""
+    site = presets.get_shelter("decennial_block")
+    solar_only = {**site["building"], "battery_kwh": 0.0, "has_generator": False}
+    g = build_graph({**site, "building": solar_only}, Building(**solar_only))
     ids = {n["id"] for n in g["nodes"]}
     assert "battery" not in ids and "generator" not in ids
     assert "solar_inverter" in ids
@@ -186,18 +187,25 @@ def test_restoration_plan_picks_the_cheapest_viable_source(graph):
 
 
 def test_recovery_ranks_by_population_per_effort_hour(mild_day):
-    """Block A (400 people) must outrank Block C (150) at equal repair effort."""
-    graphs, failed_by_site = [], {}
-    for s in presets.SHELTERS:
-        b = Building(**s["building"])
-        fl = analyze_flood(b, mild_day, 1.3)
-        g = build_graph(s, b, fl)
-        graphs.append(g)
-        failed_by_site[s["id"]] = sorted(n["id"] for n in g["nodes"] if n["health"] == "failed")
+    """At equal repair effort, the shelter serving more people must rank first.
 
-    out = prioritize(graphs, failed_by_site)
+    Built from two SYNTHETIC copies of the one real building with different populations, so the
+    population-per-effort-hour ranking stays covered without a multi-shelter roster.
+    """
+    site = presets.get_shelter("decennial_block")
+    b = Building(**site["building"])
+    fl = analyze_flood(b, mild_day, 1.3)
+
+    graphs, failed_by_site, pop_served = [], {}, {}
+    for sid, pop in (("big", 500), ("small", 150)):
+        g = build_graph({**site, "id": sid}, b, fl)
+        graphs.append(g)
+        failed_by_site[sid] = sorted(n["id"] for n in g["nodes"] if n["health"] == "failed")
+        pop_served[sid] = pop
+
+    out = prioritize(graphs, failed_by_site, pop_served=pop_served)
     order = [r["site_id"] for r in out["ranked"]]
-    assert order.index("block_a") < order.index("block_c")
+    assert order.index("big") < order.index("small")
     assert out["ranked"][0]["rank"] == 1
     assert out["placeholder"] is presets.DATA_IS_PLACEHOLDER
 

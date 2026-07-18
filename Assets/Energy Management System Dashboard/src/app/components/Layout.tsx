@@ -11,22 +11,25 @@ import { ErrorState, LoadingState } from "./States";
 import { useApi } from "../hooks/useApi";
 import { api, type Phase } from "../lib/api";
 
+// Live-telemetry pages poll every 3s so they update on their own as flood readings arrive.
+const LIVE_POLL_MS = 3000;
+
 function DependencyMapPage({ siteId, phase }: { siteId: string; phase: Phase }) {
-  const g = useApi(() => api.dependencyGraph(siteId, phase), [siteId, phase]);
+  const g = useApi(() => api.dependencyGraph(siteId, phase), [siteId, phase], LIVE_POLL_MS);
   if (g.error) return <ErrorState message={g.error} onRetry={g.reload} />;
   if (g.loading || !g.data) return <LoadingState label="Building dependency graph…" />;
   return <DependencyMap graph={g.data} />;
 }
 
 function ShelterStatusPage({ phase }: { phase: Phase }) {
-  const s = useApi(() => api.shelterStatus(phase), [phase]);
+  const s = useApi(() => api.shelterStatus(phase), [phase], LIVE_POLL_MS);
   if (s.error) return <ErrorState message={s.error} onRetry={s.reload} />;
   if (s.loading || !s.data) return <LoadingState label="Checking shelter status…" />;
   return <ShelterStatusBoard shelters={s.data.shelters} floodDepthM={s.data.flood_depth_m} />;
 }
 
 function RecoveryPage({ phase }: { phase: Phase }) {
-  const r = useApi(() => api.recovery(phase), [phase]);
+  const r = useApi(() => api.recovery(phase), [phase], LIVE_POLL_MS);
   if (r.error) return <ErrorState message={r.error} onRetry={r.reload} />;
   if (r.loading || !r.data) return <LoadingState label="Ranking repairs…" />;
   return <RecoveryPrioritization recovery={r.data} />;

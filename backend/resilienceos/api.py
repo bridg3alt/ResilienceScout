@@ -160,6 +160,23 @@ def _depth_for(phase: str, explicit: float | None = None) -> float:
     return PHASE_DEPTH_M[phase]
 
 
+# Latest live flood-depth reading per site, keyed by site_id. In-memory and non-persistent: this
+# stands in for the drone/sensor telemetry the fellowship proposes to build, and a demo has no
+# business durably storing invented water levels. `_effective_depth` prefers a real reading over
+# the phase-based design-flood GUESS, so the dashboard tracks the water instead of a fixed number.
+_OBSERVATIONS: dict[str, dict] = {}
+
+
+def _effective_depth(site_id: str, phase: str, explicit: float | None = None) -> float:
+    """Explicit override wins; else the live observation for this site; else the phase guess."""
+    if explicit is not None:
+        return explicit
+    obs = _OBSERVATIONS.get(site_id)
+    if obs is not None:
+        return obs["flood_depth_m"]
+    return _depth_for(phase)
+
+
 def _site_state(site_id: str, depth_m: float, repaired: frozenset[str] = frozenset()):
     """
     (site, building, day, flood, graph) for one shelter. Reuses the cached weather day.
@@ -215,7 +232,7 @@ def api_sites():
 
 @app.get("/api/sites/{site_id}/ceri")
 def api_ceri(site_id: str, phase: str = "preparedness", flood_depth_m: float | None = None):
-    depth = _depth_for(phase, flood_depth_m)
+    depth = _effective_depth(site_id, phase, flood_depth_m)
     repaired = _repaired_for(phase, site_id, depth)
     site, b, _day, flood, graph = _site_state(site_id, depth, repaired)
     c = ceri_score(flood, graph, b)
@@ -230,7 +247,7 @@ def api_ceri(site_id: str, phase: str = "preparedness", flood_depth_m: float | N
 
 @app.get("/api/sites/{site_id}/backup")
 def api_backup(site_id: str, phase: str = "active_flood", flood_depth_m: float | None = None):
-    depth = _depth_for(phase, flood_depth_m)
+    depth = _effective_depth(site_id, phase, flood_depth_m)
     repaired = _repaired_for(phase, site_id, depth)
     site, _b, _day, flood, _graph = _site_state(site_id, depth, repaired)
     return {
@@ -250,7 +267,7 @@ def api_backup(site_id: str, phase: str = "active_flood", flood_depth_m: float |
 @app.get("/api/dependency-graph/{site_id}")
 def api_dependency_graph(site_id: str, phase: str = "active_flood",
                          flood_depth_m: float | None = None):
-    depth = _depth_for(phase, flood_depth_m)
+    depth = _effective_depth(site_id, phase, flood_depth_m)
     repaired = _repaired_for(phase, site_id, depth)
     _site, _b, _day, _flood, graph = _site_state(site_id, depth, repaired)
     spofs = single_points_of_failure(graph)
@@ -266,9 +283,11 @@ def api_dependency_graph(site_id: str, phase: str = "active_flood",
 
 @app.get("/api/shelters/status")
 def api_shelter_status(phase: str = "active_flood", flood_depth_m: float | None = None):
-    depth = _depth_for(phase, flood_depth_m)
     rows = []
+    last_depth = _depth_for(phase, flood_depth_m)
     for s in presets.SHELTERS:
+        depth = _effective_depth(s["id"], phase, flood_depth_m)
+        last_depth = depth
         repaired = _repaired_for(phase, s["id"], depth)
         site, b, _day, flood, graph = _site_state(s["id"], depth, repaired)
         c = ceri_score(flood, graph, b)
@@ -286,7 +305,7 @@ def api_shelter_status(phase: str = "active_flood", flood_depth_m: float | None 
         })
     return {
         "phase": phase,
-        "flood_depth_m": depth,
+        "flood_depth_m": last_depth,
         "shelters": rows,
         "placeholder": presets.DATA_IS_PLACEHOLDER,
     }
@@ -294,21 +313,23 @@ def api_shelter_status(phase: str = "active_flood", flood_depth_m: float | None 
 
 @app.post("/api/recovery/prioritize")
 def api_recovery(inp: RecoveryIn):
-    depth = _depth_for(inp.phase, inp.flood_depth_m)
     graphs, failed_by_site = [], {}
+    last_depth = _depth_for(inp.phase, inp.flood_depth_m)
     for s in presets.SHELTERS:
+        depth = _effective_depth(s["id"], inp.phase, inp.flood_depth_m)
+        last_depth = depth
         _site, _b, _day, _flood, graph = _site_state(s["id"], depth)
         graphs.append(graph)
         failed_by_site[s["id"]] = failed_nodes(graph)
     out = prioritize(graphs, failed_by_site)
-    return {"phase": inp.phase, "flood_depth_m": depth, **out}
+    return {"phase": inp.phase, "flood_depth_m": last_depth, **out}
 
 
 class FloodCopilotIn(BaseModel):
-    site_id: str = "block_a"
+    site_id: str = "decennial_block"
     phase: str = "active_flood"
     flood_depth_m: float | None = None
-    question: str = "Which shelter should we reinforce first, and why?"
+    question: str = "What should we reinforce first at this building, and why?"
     multiagent: bool = False
 
 
@@ -319,12 +340,13 @@ def api_copilot(inp: FloodCopilotIn):
     (the same numbers the dashboard shows), not the heat-engine stub. Reuses the existing RAG /
     multi-agent pipeline unchanged — only the grounding context differs.
     """
-    depth = _depth_for(inp.phase, inp.flood_depth_m)
     # Validate the focus shelter up front so an unknown id 404s rather than silently dropping.
     presets.get_shelter(inp.site_id)
 
-    shelters = []
+    shelters, last_depth = [], _depth_for(inp.phase, inp.flood_depth_m)
     for s in presets.SHELTERS:
+        depth = _effective_depth(s["id"], inp.phase, inp.flood_depth_m)
+        last_depth = depth
         repaired = _repaired_for(inp.phase, s["id"], depth)
         _site, b, _day, flood, graph = _site_state(s["id"], depth, repaired)
         c = ceri_score(flood, graph, b)
@@ -337,11 +359,46 @@ def api_copilot(inp: FloodCopilotIn):
             "spofs": single_points_of_failure(graph),
         })
 
-    ctx = build_flood_context(shelters, inp.site_id, inp.phase, depth)
+    ctx = build_flood_context(shelters, inp.site_id, inp.phase, last_depth)
     result = answer_multiagent(inp.question, ctx) if inp.multiagent else copilot_answer(inp.question, ctx)
     result["site_id"] = inp.site_id
     result["phase"] = inp.phase
     return result
+
+
+class ObservationIn(BaseModel):
+    site_id: str
+    flood_depth_m: float
+    source: str = "sensor"
+    timestamp: str | None = None
+
+
+@app.post("/api/observations")
+def api_post_observation(inp: ObservationIn):
+    """
+    Ingest one live flood-depth reading for a site and store it as the latest for that site.
+
+    This endpoint is designed to accept live telemetry from drone or sensor hardware. That
+    hardware does not exist yet — building it is the explicit ask of this fellowship application.
+    Until then scripts/simulate_drone.py stands in for it. Once a reading exists, the whole
+    dashboard scores against it (see `_effective_depth`) instead of the fixed phase-based guess,
+    so the numbers track the real water with zero manual entry.
+    """
+    presets.get_shelter(inp.site_id)  # 404 on unknown site
+    reading = {
+        "site_id": inp.site_id,
+        "flood_depth_m": inp.flood_depth_m,
+        "source": inp.source,
+        "timestamp": inp.timestamp,
+    }
+    _OBSERVATIONS[inp.site_id] = reading
+    return {"stored": reading, "placeholder": presets.DATA_IS_PLACEHOLDER}
+
+
+@app.get("/api/observations")
+def api_get_observations():
+    """Latest live reading per site (empty until telemetry — real or simulated — arrives)."""
+    return {"observations": _OBSERVATIONS, "placeholder": presets.DATA_IS_PLACEHOLDER}
 
 
 @app.get("/api/ceri-trend/{site_id}")

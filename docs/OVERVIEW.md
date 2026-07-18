@@ -74,7 +74,14 @@ Heat/legacy: `/health`, `/options`, `/analyze`, `/scenario/{intervention}`,
 
 Flood domain: `/api/sites`, `/api/sites/{id}/ceri`, `/api/sites/{id}/backup`,
 `/api/dependency-graph/{id}`, `/api/shelters/status`, `/api/recovery/prioritize`,
-`/api/ceri-trend/{id}`.
+`/api/ceri-trend/{id}`, `/api/copilot`.
+
+Live telemetry: `POST /api/observations` (and `GET /api/observations`). **This endpoint is
+designed to accept live telemetry from drone or sensor hardware. That hardware does not exist yet
+— building it is the explicit ask of this fellowship application.** Until it does,
+`scripts/simulate_drone.py` stands in for it. When a reading exists, the dashboard scores against
+that live depth instead of the fixed phase-based guess (`_effective_depth` in `api.py`), and the
+UI polls every few seconds so it updates on its own with zero clicks.
 
 Every response carries `placeholder: true` while `DATA_IS_PLACEHOLDER` is set.
 

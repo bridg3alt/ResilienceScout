@@ -40,6 +40,14 @@ FLOOD_LINE_M = 0.9
 # per district (historic + RCP 8.5) and return-period rasters, but no inundation DEPTH in
 # metres. So there is no public source for these numbers — they must come from the 2018
 # high-water survey described in docs/SURVEY.md. Still invented.
+#
+# EXTERNAL CAUTION (not a source of truth, do NOT copy these into the scenarios below):
+# A satellite study of the August 2018 Kerala flood found the Kole lands of Thrissur rose by up
+# to ~10 m, with a ~3.84 m regional mean inundation. That is a whole different order than the
+# 1.2 m "severe" case here — so this "severe" is very plausibly an UNDERESTIMATE. It is left as
+# a placeholder on purpose (DATA_IS_PLACEHOLDER stays True); the point of the citation is that it
+# makes the real on-site campus survey more urgent, not that these regional figures are our
+# numbers. Do not treat the 10 m / 3.84 m as scenario inputs.
 FLOOD_SCENARIOS_M = {
     "nuisance": 0.2,
     "moderate": 0.6,
@@ -86,49 +94,40 @@ REQUIRED_BACKUP_H = 12.0     # target critical-load ride-through during a flood 
 CRITICAL_SPOF_LIMIT = 2      # above this many single points of failure, score bottoms out
 
 # --- Shelter inventory ---------------------------------------------------------------------
-# TODO(user): replace wholesale with the Sahrdaya campus inventory. `pop_served` drives the
-# recovery ranking, so inventing it would invent the recommendations — these are deliberately
-# round numbers so they read as obviously fake.
+# ONE real candidate building — the Decennial Block at Sahrdaya College of Engineering &
+# Technology, Kodakara, Thrissur. The earlier three-shelter roster (Blocks A/B/C) was invented
+# scaffolding; the demo is now honest about modelling the single building that actually exists.
+#
+# What is SOURCED vs INVENTED for this entry:
+#   * SOURCED  — the building's identity and campus location (10.3595, 76.2859, Kodakara campus
+#                centre; Open-Meteo's grid is coarser than the campus, so centre precision is
+#                fine).
+#   * INVENTED — pop_served (500) and solar_kwp (180) are round placeholders; battery_kwh,
+#                has_generator, floor area, critical load, and every EQUIPMENT_ELEVATION_M are
+#                UNMEASURED and TODO(user)-flagged below. Nothing here is surveyed
+#                (DATA_IS_PLACEHOLDER stays True).
+#
+# TODO(user): a campus SUBSTATION exists and is the real grid feed for this block. It should be
+# added as an upstream node in the dependency graph (feeding the transformer) once its physical
+# connection to the Decennial Block is confirmed on site. Not modelled yet — adding it before the
+# connection is confirmed would invent a topology.
 SHELTERS = [
     {
-        "id": "block_a",
-        "name": "Block A — Main Hall",
-        "pop_served": 400,
+        "id": "decennial_block",
+        "name": "Decennial Block — Sahrdaya College of Engineering, Kodakara",
+        "pop_served": 500,   # TODO(user): INVENTED round number; confirm real shelter capacity.
         "building": {
-            "name": "Block A — Main Hall",
-            # SOURCED: Sahrdaya College of Engineering & Technology, Kodakara, Thrissur.
-            # Was 10.5276, 76.2144 — that is Thrissur CITY, ~19 km north, so every weather call
-            # was keyed to the wrong town. Kodakara is 10.3719, 76.3056 (Wikipedia); the campus
-            # itself is 10.3595, 76.2859. Campus-centre precision is fine here: all three blocks
-            # share one coordinate because Open-Meteo's grid is coarser than the campus anyway.
+            "name": "Decennial Block — Sahrdaya College of Engineering, Kodakara",
+            # SOURCED: Sahrdaya College of Engineering & Technology, Kodakara, Thrissur campus
+            # centre (10.3595, 76.2859).
             "latitude": 10.3595, "longitude": 76.2859,
+            # TODO(user): floor area / floors — estimated, not surveyed.
             "floor_area_m2": 1200.0, "num_floors": 3,
-            "solar_kwp": 20.0, "battery_kwh": 20.0,
-            "critical_load_kw": 5.0, "has_generator": True,
-        },
-    },
-    {
-        "id": "block_b",
-        "name": "Block B — Community Centre",
-        "pop_served": 250,
-        "building": {
-            "name": "Block B — Community Centre",
-            "latitude": 10.3595, "longitude": 76.2859,
-            "floor_area_m2": 800.0, "num_floors": 2,
-            "solar_kwp": 10.0, "battery_kwh": 0.0,
-            "critical_load_kw": 3.0, "has_generator": False,
-        },
-    },
-    {
-        "id": "block_c",
-        "name": "Block C — Clinic Annexe",
-        "pop_served": 150,
-        "building": {
-            "name": "Block C — Clinic Annexe",
-            "latitude": 10.3595, "longitude": 76.2859,
-            "floor_area_m2": 500.0, "num_floors": 1,
-            "solar_kwp": 5.0, "battery_kwh": 10.0,
-            "critical_load_kw": 4.0, "has_generator": False,
+            "solar_kwp": 180.0,      # TODO(user): INVENTED nameplate; confirm installed PV kWp.
+            "battery_kwh": 20.0,     # TODO(user): UNMEASURED — placeholder so the model keeps a
+                                     # battery source; confirm real storage (kWh/chemistry).
+            "critical_load_kw": 5.0, # TODO(user): UNMEASURED critical load.
+            "has_generator": True,   # TODO(user): UNMEASURED — assumed present; confirm on site.
         },
     },
 ]
