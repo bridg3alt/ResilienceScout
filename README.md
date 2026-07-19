@@ -104,7 +104,7 @@ Without a key the copilot still works — it returns the grounded evidence
 ## Verify it works
 
 ```bash
-python -m pytest              # 74 regression tests (flood domain + datum + scoring + provenance)
+python -m pytest              # 77 regression tests (flood domain + datum + scoring + provenance)
 
 cd backend
 python validate_physics.py    # twin physics sanity checks (uses real weather)

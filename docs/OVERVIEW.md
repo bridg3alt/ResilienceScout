@@ -108,6 +108,33 @@ read the post-flood resource set.
 - **Solar during the generator run is not credited** to the battery, and the battery phase is not
   time-shifted past the generator run. Both err conservative.
 
+## Recovery targets adequacy, not connectivity
+
+`shelter_powered()` asks *"is a wire still connected?"*. `flood.operational` asks *"can this
+shelter carry its critical load for the required window?"*. At 1.2 m those disagree: the
+roof-mounted solar inverter (1.80 m) survives, so the graph reads **powered**, while the energy
+model reports **0 h** of backup and CERI scores the shelter **Critical**.
+
+The recovery search originally keyed off connectivity alone, so it returned *"already powered,
+nothing to repair"* at exactly the depth the shelter was worst off. Two consequences: the
+post-flood page was empty, and because no repairs were ever found, the **recovery phase rendered
+identically to the active-flood phase**.
+
+`restoration_plan()` now takes an optional `is_adequate` predicate layered on top of connectivity;
+the API supplies one backed by `analyze_flood(...).operational`. Connectivity is necessary and not
+sufficient. The predicate lives in the caller because the energy model sits outside `recovery.py`.
+
+What the three phases now show:
+
+| Phase | Depth | CERI | Backup | State |
+|---|---|---|---|---|
+| Before (`preparedness`) | 0.60 m | 76 Resilient | 14.0 h | battery lost, generator carries |
+| During (`active_flood`) | 1.20 m | 16 Critical | 0.0 h | generator and transformer lost too |
+| After (`recovery`) | 1.20 m | 76 Resilient | 14.0 h | scored with the ranked repairs applied |
+
+And the repair plan it produces: **fix the generator, 12 h** — deferring the battery (10 h), road
+access (8 h) and the transformer (48 h). 12 hours of work instead of 78 restores 400 people.
+
 ## CERI — Climate Energy Readiness Index
 
 0–100, four transparent sub-scores (`engine.ceri_score`):
@@ -173,7 +200,7 @@ are stored alongside the converted depth so the conversion stays auditable.
 - **Weather.** Live Open-Meteo forecast + history. Verified resolving at the corrected campus
   coordinates (Kodakara: 10.3595, 76.2859) — ~23 °C, 99% RH, monsoon-plausible for July.
 - **All the logic** — flood inundation per asset, dependency-graph SPOF detection, exhaustive
-  recovery search, CERI scoring, budget optimization. Covered by 74 passing regression tests.
+  recovery search, CERI scoring, budget optimization. Covered by 77 passing regression tests.
 - **Campus coordinates.** SOURCED and corrected: were 10.5276, 76.2144 (Thrissur *city*,
   ~19 km north — every weather call was keyed to the wrong town). Now the Kodakara campus.
 
@@ -277,7 +304,7 @@ named values with measurements. **[docs/SURVEY.md](SURVEY.md)** §7 is exactly w
 ## Verify
 
 ```bash
-python -m pytest              # 74 regression tests — flood domain + datum + scoring + provenance
+python -m pytest              # 77 regression tests — flood domain + datum + scoring + provenance
 cd backend
 python validate_physics.py    # twin physics sanity (live weather)
 python smoke_pipeline.py      # heatwave → outage → score → plan → retrofits

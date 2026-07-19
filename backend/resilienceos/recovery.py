@@ -61,22 +61,46 @@ def effort_is_estimated(node: str) -> bool:
     return node not in REPAIR_EFFORT_H
 
 
-def restoration_plan(graph: dict, failed: set[str]) -> dict:
+def restoration_plan(graph: dict, failed: set[str],
+                     is_adequate=None) -> dict:
     """
-    The minimum-effort set of repairs that re-powers this shelter.
+    The minimum-effort set of repairs that returns this shelter to service.
 
     Exhaustive over subsets of the failed assets, smallest first, tie-broken by total effort —
     so the result is optimal for the modelled graph, not a greedy approximation.
+
+    `is_adequate`: optional callable(repaired: frozenset[str]) -> bool, layered ON TOP of graph
+    connectivity. When supplied, a repair set only counts if the shelter is both wired up AND able
+    to carry its critical load for the required window.
+
+    Why it exists. `shelter_powered()` asks "is a wire still connected?", which is not the same
+    question as "can this shelter do its job?". At 1.2 m of water the battery, generator and
+    transformer are all drowned while the roof-mounted solar inverter survives — so the graph reads
+    POWERED and this function used to return "already_powered, nothing to repair", at the exact
+    moment the energy model reported 0 h of backup and CERI scored the shelter Critical.
+
+    The recovery page was therefore empty precisely when the shelter was in its worst state, and
+    the post-flood phase rendered identically to the during-flood phase because no repairs were
+    ever applied. Connectivity is necessary and not sufficient; adequacy is the operational
+    question, and the caller supplies it because the energy model lives outside this module.
     """
     failed = set(failed)
-    if shelter_powered(graph, failed):
+
+    def _restored(remaining_failed: set[str]) -> bool:
+        if not shelter_powered(graph, remaining_failed):
+            return False
+        if is_adequate is None:
+            return True
+        return is_adequate(frozenset(failed - remaining_failed))
+
+    if _restored(failed):
         return {"repairs": [], "effort_h": 0.0, "achievable": True, "already_powered": True}
 
     candidates = sorted(failed)
     for size in range(1, len(candidates) + 1):
         best: tuple[list[str], float] | None = None
         for combo in itertools.combinations(candidates, size):
-            if shelter_powered(graph, failed - set(combo)):
+            if _restored(failed - set(combo)):
                 eff = sum(_effort(c) for c in combo)
                 if best is None or eff < best[1]:
                     best = (list(combo), eff)
@@ -99,14 +123,20 @@ def restoration_plan(graph: dict, failed: set[str]) -> dict:
 
 
 def prioritize(graphs: list[dict], failed_by_site: dict[str, list[str]],
-               pop_served: dict[str, int] | None = None) -> dict:
+               pop_served: dict[str, int] | None = None,
+               adequacy_by_site: dict[str, object] | None = None) -> dict:
     """
     graphs: one dependency graph per shelter. failed_by_site: {site_id: [failed node ids]}.
 
     Returns shelters ranked by population restored per repair-hour, each with the concrete
     minimum repair set that achieves it.
+
+    `adequacy_by_site`: optional {site_id: callable(repaired) -> bool}. Supplying it makes a
+    shelter count as needing repair when it cannot carry its critical load for the required
+    window, rather than only when the graph is disconnected — see `restoration_plan`.
     """
     pop_served = pop_served if pop_served is not None else presets.POP_SERVED
+    adequacy_by_site = adequacy_by_site or {}
     ranked: list[dict] = []
 
     for graph in graphs:
@@ -119,9 +149,9 @@ def prioritize(graphs: list[dict], failed_by_site: dict[str, list[str]],
         if not failed:
             continue
 
-        plan = restoration_plan(graph, failed)
+        plan = restoration_plan(graph, failed, adequacy_by_site.get(site_id))
         if plan["already_powered"]:
-            continue   # nothing to prioritise; the shelter is still running
+            continue   # nothing to prioritise; the shelter is carrying its load
 
         pop = pop_served.get(site_id, 0)
         bound = presets.shelter_capacity_upper_bound(site_id)

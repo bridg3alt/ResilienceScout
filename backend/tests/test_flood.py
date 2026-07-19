@@ -614,3 +614,65 @@ def test_the_generator_margin_is_inside_the_survey_uncertainty():
     margin = presets.EQUIPMENT_ELEVATION_M["generator"] - presets.FLOOD_LINE_M
     assert round(margin, 2) == 0.03
     assert margin < presets.AT_RISK_MARGIN_M, "margin escaped the error bars; re-check the finding"
+
+
+# --- Recovery targets load adequacy, not just connectivity ---------------------------------------
+# shelter_powered() asks "is a wire connected?". flood.operational asks "can it carry the load for
+# the required window?". At 1.2 m those disagree: the roof inverter survives so the graph reads
+# powered, while the energy model reports 0 h of backup. Keying recovery off connectivity alone
+# made the post-flood page empty at exactly the depth the shelter scored Critical.
+
+
+def test_connectivity_and_adequacy_genuinely_disagree(site, building, mild_day):
+    """The premise of the fix. If this ever stops holding, the extra machinery is unnecessary."""
+    flood = analyze_flood(building, mild_day, 1.2)
+    g = build_graph(site, building, flood)
+
+    assert shelter_powered(g, set(presets.flooded_equipment(1.2))), "graph should read powered"
+    assert not flood.operational, "energy model should read inadequate"
+
+
+def test_recovery_plans_repairs_when_the_shelter_cannot_carry_its_load(site, building, mild_day):
+    """
+    Without the adequacy predicate the search returns 'already_powered, nothing to repair' on a
+    shelter with 0 h of backup. With it, the plan names the repair that restores service.
+    """
+    from dataclasses import replace
+
+    depth = 1.2
+    flood = analyze_flood(building, mild_day, depth)
+    g = build_graph(site, building, flood)
+    failed = set(presets.flooded_equipment(depth))
+
+    # Old behaviour: connectivity only -> nothing to do.
+    assert restoration_plan(g, failed)["already_powered"] is True
+
+    # New behaviour: adequacy layered on top -> a real plan.
+    def is_adequate(repaired):
+        return analyze_flood(building, mild_day, depth, repaired=repaired).operational
+
+    plan = restoration_plan(g, failed, is_adequate)
+    assert plan["already_powered"] is False
+    assert plan["achievable"] is True
+    assert plan["repairs"], "a shelter at 0 h backup must have something worth repairing"
+    # And the plan it picks must actually restore service, not merely reconnect a wire.
+    assert is_adequate(frozenset(plan["repairs"]))
+
+
+def test_the_adequate_plan_is_cheaper_than_repairing_everything(site, building, mild_day):
+    """
+    The argument the recovery page makes: knowing what carries the load beats fixing what broke.
+    """
+    from resilienceos.recovery import _effort
+
+    depth = 1.2
+    flood = analyze_flood(building, mild_day, depth)
+    g = build_graph(site, building, flood)
+    failed = set(presets.flooded_equipment(depth))
+
+    def is_adequate(repaired):
+        return analyze_flood(building, mild_day, depth, repaired=repaired).operational
+
+    plan = restoration_plan(g, failed, is_adequate)
+    everything = sum(_effort(f) for f in failed)
+    assert plan["effort_h"] < everything

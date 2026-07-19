@@ -209,6 +209,26 @@ def _site_state(site_id: str, depth_m: float, repaired: frozenset[str] = frozens
     return site, b, day, flood, graph
 
 
+def _adequacy_check(site_id: str, depth_m: float):
+    """
+    Predicate for the recovery search: does repairing `repaired` let the shelter carry its
+    critical load for the required window?
+
+    This is what makes the recovery phase answer the operational question rather than a wiring
+    one. `shelter_powered()` only asks whether a source is still connected — at 1.2 m the roof
+    inverter survives, so the graph reads powered while the energy model reports 0 h of backup.
+    Without this check the search concluded "nothing to repair" on a shelter scoring Critical.
+    """
+    site = presets.get_shelter(site_id)
+    b = Building(**site["building"])
+    day = _day_for(b.latitude, b.longitude)
+
+    def is_adequate(repaired: frozenset[str]) -> bool:
+        return analyze_flood(b, day, depth_m, repaired=repaired).operational
+
+    return is_adequate
+
+
 def _repaired_for(phase: str, site_id: str, depth_m: float) -> frozenset[str]:
     """
     Recovery phase = the shelter after its ranked minimum repairs are applied. Find that repair
@@ -218,7 +238,9 @@ def _repaired_for(phase: str, site_id: str, depth_m: float) -> frozenset[str]:
     if phase != "recovery":
         return frozenset()
     _site, _b, _day, _flood, graph = _site_state(site_id, depth_m)
-    plan = restoration_plan(graph, set(failed_nodes(graph)))
+    plan = restoration_plan(
+        graph, set(failed_nodes(graph)), _adequacy_check(site_id, depth_m)
+    )
     return frozenset(plan["repairs"])
 
 
@@ -397,7 +419,7 @@ def api_shelter_status(phase: str = "active_flood", flood_depth_m: float | None 
 
 @app.post("/api/recovery/prioritize")
 def api_recovery(inp: RecoveryIn):
-    graphs, failed_by_site = [], {}
+    graphs, failed_by_site, adequacy = [], {}, {}
     last_depth = _depth_for(inp.phase, inp.flood_depth_m)
     for s in presets.SHELTERS:
         depth = _effective_depth(s["id"], inp.phase, inp.flood_depth_m)
@@ -405,7 +427,9 @@ def api_recovery(inp: RecoveryIn):
         _site, _b, _day, _flood, graph = _site_state(s["id"], depth)
         graphs.append(graph)
         failed_by_site[s["id"]] = failed_nodes(graph)
-    out = prioritize(graphs, failed_by_site)
+        # Rank against the shelter's ability to carry its load, not merely its wiring.
+        adequacy[s["id"]] = _adequacy_check(s["id"], depth)
+    out = prioritize(graphs, failed_by_site, adequacy_by_site=adequacy)
     return {"phase": inp.phase, "flood_depth_m": last_depth, **out}
 
 
