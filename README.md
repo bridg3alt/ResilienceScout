@@ -83,7 +83,7 @@ cd backend
 uvicorn resilienceos.api:app --reload      # http://localhost:8000/docs
 
 # 2. dashboard (separate terminal)
-cd "Assets/Energy Management System Dashboard"
+cd dashboard
 npm install
 npm run dev                                # http://localhost:5173
 ```
@@ -104,7 +104,7 @@ Without a key the copilot still works — it returns the grounded evidence
 ## Verify it works
 
 ```bash
-python -m pytest              # 77 regression tests (flood domain + datum + scoring + provenance)
+python -m pytest              # 80 regression tests (flood domain + datum + scoring + provenance)
 
 cd backend
 python validate_physics.py    # twin physics sanity checks (uses real weather)
@@ -122,7 +122,7 @@ backend/resilienceos/
   dependency_graph.py           recovery.py    # SPOF detection, repair prioritisation
   engine.py      scenarios.py                  # CERI scoring, retrofits
   copilot/       report.py      api.py         # RAG copilot, report, JSON API
-Assets/Energy Management System Dashboard/     # React dashboard (Vite + Tailwind + Radix)
+dashboard/                                     # React dashboard (Vite + Tailwind + Radix)
 docs/OVERVIEW.md                               # what's real, what's invented, what's needed
 ```
 
@@ -130,6 +130,7 @@ docs/OVERVIEW.md                               # what's real, what's invented, w
 
 - [docs/OVERVIEW.md](docs/OVERVIEW.md) — architecture, and the surveyed-vs-provisional ledger.
 - [docs/SURVEY.md](docs/SURVEY.md) — what has been surveyed, and §7 what remains.
+- [docs/DEPLOY.md](docs/DEPLOY.md) — hosting the demo free on Render + Vercel.
 
 ## Roadmap (post-MVP)
 

@@ -157,6 +157,15 @@ Flood domain: `/api/sites`, `/api/sites/{id}/ceri`, `/api/sites/{id}/backup`,
 `/api/dependency-graph/{id}`, `/api/shelters/status`, `/api/recovery/prioritize`,
 `/api/ceri-trend/{id}`, `/api/copilot`.
 
+Every scoring endpoint takes an optional `flood_depth_m` that overrides the phase's design flood
+(`_effective_depth`). The dashboard's **flood-depth control** drives it, so a reader can drag the
+water across the 3 cm generator margin and watch CERI collapse 76 → 16 rather than read that it
+does. `/api/sites` serves the marks that control renders — `hazard_reference`: the observed flood
+line, the survey uncertainty and 2σ at-risk margin, and the per-asset elevations. Those are
+**surveyed** values, so they are served rather than written into the frontend: a measurement
+copied into a React component is one that can drift from `presets.py` with nothing failing. The
+substation's continued absence from that payload is asserted on the wire, not only in `presets`.
+
 Live telemetry: `POST /api/observations` (and `GET /api/observations`). **This endpoint is
 designed to accept live telemetry from drone or sensor hardware. That hardware does not exist yet
 — building it is the explicit ask of this fellowship application.** Until it does,
@@ -200,7 +209,7 @@ are stored alongside the converted depth so the conversion stays auditable.
 - **Weather.** Live Open-Meteo forecast + history. Verified resolving at the corrected campus
   coordinates (Kodakara: 10.3595, 76.2859) — ~23 °C, 99% RH, monsoon-plausible for July.
 - **All the logic** — flood inundation per asset, dependency-graph SPOF detection, exhaustive
-  recovery search, CERI scoring, budget optimization. Covered by 77 passing regression tests.
+  recovery search, CERI scoring, budget optimization. Covered by 80 passing regression tests.
 - **Campus coordinates.** SOURCED and corrected: were 10.5276, 76.2144 (Thrissur *city*,
   ~19 km north — every weather call was keyed to the wrong town). Now the Kodakara campus.
 
@@ -304,7 +313,7 @@ named values with measurements. **[docs/SURVEY.md](SURVEY.md)** §7 is exactly w
 ## Verify
 
 ```bash
-python -m pytest              # 77 regression tests — flood domain + datum + scoring + provenance
+python -m pytest              # 80 regression tests — flood domain + datum + scoring + provenance
 cd backend
 python validate_physics.py    # twin physics sanity (live weather)
 python smoke_pipeline.py      # heatwave → outage → score → plan → retrofits

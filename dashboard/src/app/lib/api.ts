@@ -51,6 +51,27 @@ export interface SitesResponse {
   reported?: Record<string, string>;
   /** Per-site check of the claimed population against what the floor area can actually hold. */
   capacity_check?: Record<string, CapacityCheck>;
+  /** Surveyed reference marks for the depth control. Served, never hardcoded here. */
+  hazard_reference?: HazardReference;
+}
+
+/**
+ * The surveyed hazard datum, straight from presets.py.
+ *
+ * `at_risk_margin_m` is 2x the survey's own 1-sigma uncertainty: once the water is within that
+ * distance of an asset, the difference between "dry" and "drowned" is inside measurement noise,
+ * and the model reports `at_risk` rather than claiming to know. The depth control renders that
+ * band rather than a hard line, because a hard line would assert a precision nobody measured.
+ */
+export interface HazardReference {
+  /** Observed August 2018 high-water mark, m above finished floor. */
+  flood_line_m: number;
+  /** 1-sigma survey uncertainty, m. Null before any survey established one. */
+  survey_uncertainty_m: number | null;
+  /** ~2 sigma. Half-width of the amber "cannot honestly resolve this" band. */
+  at_risk_margin_m: number;
+  /** Asset id -> height above finished floor, m. */
+  equipment_elevation_m: Record<string, number>;
 }
 
 export interface CapacityCheck {
@@ -264,18 +285,44 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+/**
+ * Every scoring endpoint accepts an explicit `flood_depth_m` that overrides the phase's design
+ * flood (see `_effective_depth` in api.py). `undefined` means "no override" — the backend then
+ * falls back to a live observation if one exists, and only then to the phase guess. Passing the
+ * phase default explicitly would look identical but would silently outrank live telemetry, so
+ * the parameter is omitted rather than defaulted.
+ */
+function depthQuery(floodDepthM?: number): string {
+  return floodDepthM === undefined ? "" : `&flood_depth_m=${floodDepthM}`;
+}
+
 export const api = {
   sites: () => get<SitesResponse>("/api/sites"),
-  ceri: (siteId: string, phase: Phase) =>
-    get<CeriResponse>(`/api/sites/${siteId}/ceri?phase=${phase}`),
-  backup: (siteId: string, phase: Phase) =>
-    get<BackupResponse>(`/api/sites/${siteId}/backup?phase=${phase}`),
-  dependencyGraph: (siteId: string, phase: Phase) =>
-    get<DependencyGraphResponse>(`/api/dependency-graph/${siteId}?phase=${phase}`),
-  shelterStatus: (phase: Phase) =>
-    get<ShelterStatusResponse>(`/api/shelters/status?phase=${phase}`),
+  ceri: (siteId: string, phase: Phase, floodDepthM?: number) =>
+    get<CeriResponse>(`/api/sites/${siteId}/ceri?phase=${phase}${depthQuery(floodDepthM)}`),
+  backup: (siteId: string, phase: Phase, floodDepthM?: number) =>
+    get<BackupResponse>(`/api/sites/${siteId}/backup?phase=${phase}${depthQuery(floodDepthM)}`),
+  dependencyGraph: (siteId: string, phase: Phase, floodDepthM?: number) =>
+    get<DependencyGraphResponse>(
+      `/api/dependency-graph/${siteId}?phase=${phase}${depthQuery(floodDepthM)}`,
+    ),
+  shelterStatus: (phase: Phase, floodDepthM?: number) =>
+    get<ShelterStatusResponse>(`/api/shelters/status?phase=${phase}${depthQuery(floodDepthM)}`),
   ceriTrend: (siteId: string) => get<CeriTrendResponse>(`/api/ceri-trend/${siteId}`),
-  recovery: (phase: Phase) => post<RecoveryResponse>("/api/recovery/prioritize", { phase }),
-  copilot: (siteId: string, phase: Phase, question: string, multiagent = false) =>
-    post<CopilotResponse>("/api/copilot", { site_id: siteId, phase, question, multiagent }),
+  recovery: (phase: Phase, floodDepthM?: number) =>
+    post<RecoveryResponse>("/api/recovery/prioritize", { phase, flood_depth_m: floodDepthM }),
+  copilot: (
+    siteId: string,
+    phase: Phase,
+    question: string,
+    multiagent = false,
+    floodDepthM?: number,
+  ) =>
+    post<CopilotResponse>("/api/copilot", {
+      site_id: siteId,
+      phase,
+      question,
+      multiagent,
+      flood_depth_m: floodDepthM,
+    }),
 };

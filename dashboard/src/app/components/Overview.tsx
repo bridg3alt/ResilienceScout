@@ -15,14 +15,16 @@ interface OverviewProps {
   sites: Site[];
   selectedId: string;
   onSelect: (id: string) => void;
+  /** Depth-control override, or undefined to score against the phase's design flood. */
+  depthM?: number;
 }
 
-export function Overview({ phase, sites, selectedId, onSelect }: OverviewProps) {
+export function Overview({ phase, sites, selectedId, onSelect, depthM }: OverviewProps) {
   // Poll CERI + status every 3s so the headline readiness tracks live flood readings; the trend
-  // is a fixed hazard-severity sweep, so it doesn't poll.
-  const ceri = useApi(() => api.ceri(selectedId, phase), [selectedId, phase], 3000);
+  // is a fixed hazard-severity sweep, so it doesn't poll and takes no depth.
+  const ceri = useApi(() => api.ceri(selectedId, phase, depthM), [selectedId, phase, depthM], 3000);
   const trend = useApi(() => api.ceriTrend(selectedId), [selectedId]);
-  const status = useApi(() => api.shelterStatus(phase), [phase], 3000);
+  const status = useApi(() => api.shelterStatus(phase, depthM), [phase, depthM], 3000);
 
   return (
     <div className="space-y-4">
@@ -49,7 +51,9 @@ export function Overview({ phase, sites, selectedId, onSelect }: OverviewProps) 
                   </Badge>
                 </div>
                 <div className="mt-1 text-xs text-sidebar-foreground/70">
-                  {ceri.data.site_name} · assessed at {ceri.data.flood_depth_m.toFixed(1)} m
+                  {/* Two decimals: the depth control moves in centimetres, and this shelter's
+                      whole margin is 3 cm wide. One decimal would round the finding away. */}
+                  {ceri.data.site_name} · assessed at {ceri.data.flood_depth_m.toFixed(2)} m
                 </div>
               </div>
               {status.data && <CommunityImpactCard shelters={status.data.shelters} />}

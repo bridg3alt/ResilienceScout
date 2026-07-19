@@ -8,6 +8,7 @@ Run: uvicorn resilienceos.api:app --reload  (from the backend/ directory)
 """
 from __future__ import annotations
 
+import os
 from functools import lru_cache
 
 from fastapi import FastAPI, HTTPException
@@ -28,8 +29,22 @@ from .copilot.rag import answer as copilot_answer
 from .copilot.agents import answer_multiagent
 
 app = FastAPI(title="ResilienceScout API", version="0.2.0")
+
+# Comma-separated origins, e.g. ALLOWED_ORIGINS="https://resiliencescout.vercel.app".
+#
+# Unset falls back to "*", which keeps the README's promise that the stack runs locally with zero
+# configuration -- a first-time reader should not have to set an environment variable to make
+# their own dashboard talk to their own backend. A deployment sets the variable and stops being
+# world-callable. The permissive default is therefore a LOCAL default, not a deployed one.
+_ALLOWED_ORIGINS = [
+    o.strip() for o in os.getenv("ALLOWED_ORIGINS", "*").split(",") if o.strip()
+] or ["*"]
+
 app.add_middleware(
-    CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"],
+    CORSMiddleware,
+    allow_origins=_ALLOWED_ORIGINS,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
@@ -262,6 +277,19 @@ def api_sites():
         ],
         "phases": list(PHASE_DEPTH_M),
         "flood_scenarios_m": presets.FLOOD_SCENARIOS_M,
+        # The surveyed reference marks the depth control renders against: the observed flood
+        # line, the uncertainty band around every elevation, and the per-asset heights.
+        #
+        # Served rather than hardcoded in the dashboard on purpose. These are SURVEYED values,
+        # and a copy of a measurement living in the frontend is a measurement that can drift
+        # from presets.py without anything failing. The provenance discipline only holds if
+        # there is exactly one place each number is written down.
+        "hazard_reference": {
+            "flood_line_m": presets.FLOOD_LINE_M,
+            "survey_uncertainty_m": presets.SURVEY_UNCERTAINTY_M,
+            "at_risk_margin_m": presets.AT_RISK_MARGIN_M,
+            "equipment_elevation_m": presets.EQUIPMENT_ELEVATION_M,
+        },
         "placeholder": presets.DATA_IS_PLACEHOLDER,
         # Named provenance, so the dashboard notice can say WHICH figures are still provisional
         # instead of implying the whole model is unmeasured. Both are surfaced: leading with what

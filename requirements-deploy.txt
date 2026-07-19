@@ -1,0 +1,24 @@
+# ResilienceScout — deployment dependencies (hosted demo only).
+#
+# This is requirements.txt MINUS chromadb and pytest. Use requirements.txt for local development;
+# this file exists purely to make the hosted API start fast enough to be clickable.
+#
+# WHY chromadb is dropped: it pulls onnxruntime and tokenizers — hundreds of megabytes of native
+# wheels that dominate both image size and cold-start time. The copilot already degrades to the
+# built-in TF-IDF retriever when chromadb is unavailable (see copilot/rag.py), and on a corpus of
+# four short guideline documents the two retrievers return the same passages. So the demo loses
+# nothing a reader can observe, and gains a server that answers on the first click instead of the
+# second minute.
+#
+# This is a HOSTING decision, not a model change. Nothing here alters a number the dashboard
+# shows: retrieval picks which guideline text grounds an answer, never what the physics or the
+# dependency graph computes.
+rcbsim>=0.3b0          # 5R1C ISO-13790 digital twin (ETH Zürich, MIT)
+httpx>=0.27           # Open-Meteo / NASA POWER calls
+numpy>=1.26
+pandas>=2.0
+fastapi>=0.110        # JSON API backend
+uvicorn[standard]>=0.29
+jinja2>=3.1           # resilience report
+groq>=0.11            # LLM copilot (set GROQ_API_KEY; optional — degrades gracefully)
+python-dotenv>=1.0    # loads GROQ_API_KEY from the environment

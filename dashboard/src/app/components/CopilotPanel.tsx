@@ -15,10 +15,12 @@ const SUGGESTIONS = [
 interface CopilotPanelProps {
   siteId: string;
   phase: Phase;
+  /** Depth-control override, so answers are grounded in the depth on screen. */
+  depthM?: number;
 }
 
 /** Grounded copilot. Answers come from the backend's RAG pipeline over live model output. */
-export function CopilotPanel({ siteId, phase }: CopilotPanelProps) {
+export function CopilotPanel({ siteId, phase, depthM }: CopilotPanelProps) {
   const [question, setQuestion] = useState(SUGGESTIONS[0]);
   const [answer, setAnswer] = useState<CopilotResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -32,7 +34,7 @@ export function CopilotPanel({ siteId, phase }: CopilotPanelProps) {
     setAnswer(null);
     setShowSources(false);
     try {
-      setAnswer(await api.copilot(siteId, phase, question));
+      setAnswer(await api.copilot(siteId, phase, question, false, depthM));
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
