@@ -51,6 +51,10 @@ class BuildingIn(BaseModel):
     solar_kwp: float = 20.0
     battery_kwh: float = 0.0
     has_generator: bool = False
+    # Default 0.0 so a caller that only flips has_generator gets no energy credit — the set is
+    # then structurally present but carries nothing, matching the pre-existing behaviour.
+    generator_rated_kw: float = 0.0
+    generator_runtime_h: float = 0.0
     t_set_cooling: float = 26.0
     critical_load_kw: float = 5.0
 

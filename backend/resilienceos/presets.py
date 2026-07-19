@@ -373,7 +373,10 @@ AT_RISK_MARGIN_M = (
 EQUIPMENT_EFFECT = {
     "battery": {"battery_kwh": 0.0},
     "solar_inverter": {"solar_kwp": 0.0},   # panels intact, but nothing to convert their DC
-    "generator": {"has_generator": False},
+    # Zeroing the runtime and rating as well as the flag is load-bearing now that the generator
+    # carries energy: clearing has_generator alone would leave a drowned set still contributing
+    # 14 h of fuel to any caller that reads the runtime directly.
+    "generator": {"has_generator": False, "generator_runtime_h": 0.0, "generator_rated_kw": 0.0},
 }
 
 # RESOLVED (2026-07): the survey found two assets the graph had no node for. Wiring them in
@@ -449,6 +452,26 @@ SHELTERS = [
             # SOURCED: surveyed — 62.5 kVA diesel, 220 L tank, ~14 h runtime at 70% load,
             # automatic transfer switch (ATS) available.
             "has_generator": True,
+            # DERIVED from the surveyed nameplate: 62.5 kVA x 0.8 power factor = 50 kW. 0.8 pf is
+            # the standard assumption for a diesel set and is stated rather than measured. Well
+            # above the 18 kW critical load, so the set carries it comfortably while fuel lasts —
+            # the binding constraint is endurance, not capacity.
+            "generator_rated_kw": 50.0,
+            # SOURCED, used as a deliberate FLOOR rather than an estimate.
+            #
+            # The survey gives one point on the fuel curve: 220 L lasting ~14 h at 70% load
+            # (~35 kW), i.e. ~15.7 L/h. The actual critical load is 18 kW — roughly half that —
+            # so the set would in reality run considerably LONGER than 14 h.
+            #
+            # How much longer cannot be computed from one point. Diesel consumption is load
+            # dependent with a substantial no-load component, so scaling 15.7 L/h linearly by
+            # 18/35 would assume the no-load draw away and overstate endurance. Fitting the curve
+            # needs a second fuel measurement nobody took.
+            #
+            # So 14 h is used unscaled. It is the conservative end of a range whose upper bound is
+            # unknown, which is the safe direction to be wrong in for a shelter.
+            # TODO(user): one more fuel-burn figure at a second load closes this.
+            "generator_runtime_h": 14.0,
             # REPORTED: college confirms 18.0 kW is the correct total, settling WHICH of the two
             # survey records to use. That is a real answer to a real question.
             #

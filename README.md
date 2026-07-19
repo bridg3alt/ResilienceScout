@@ -65,6 +65,7 @@ Built for the 2026 NY Climate Exchange Climate Tech Fellowship (Energy × Urban 
 | Digital twin | 5R1C ISO-13790 thermal model via `rcbsim` (ETH Zürich, MIT) |
 | Flood hazard | Per-asset elevation → inundation → which DER survives |
 | Dependency graph | Shelter → panel → transformer / solar / battery / generator, with SPOF detection |
+| Backup energy | Generator fuel endurance (ATS-ordered) → battery → solar, against the critical load |
 | Scoring | CERI 0–100: energy readiness, flood readiness, backup duration, critical vulnerabilities |
 | Recovery | **Exhaustive** minimum-effort repair search, ranked by population-per-repair-hour |
 | Retrofits | Scenario comparison + budget optimizer (resilience gain / ₹) |
@@ -103,7 +104,7 @@ Without a key the copilot still works — it returns the grounded evidence
 ## Verify it works
 
 ```bash
-python -m pytest              # 68 regression tests (flood domain + datum + scoring + provenance)
+python -m pytest              # 74 regression tests (flood domain + datum + scoring + provenance)
 
 cd backend
 python validate_physics.py    # twin physics sanity checks (uses real weather)

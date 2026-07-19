@@ -128,6 +128,9 @@ def analyze_flood(
             "solar_kwp": degraded.solar_kwp,
             "battery_kwh": degraded.battery_kwh,
             "has_generator": degraded.has_generator,
+            # Endurance of what actually survived, so a caller scoring "can this shelter carry its
+            # load" reads the post-flood resource set rather than the nameplate.
+            "generator_hours": generator_hours(degraded),
         },
         backup_hours=backup,
         required_backup_h=required,
@@ -153,15 +156,49 @@ def analyze_heatwave(b: Building, day: pd.DataFrame, hvac_active: bool = True) -
     )
 
 
+def generator_hours(b: Building) -> float:
+    """
+    Hours the on-site generator can carry the critical load on the fuel it holds.
+
+    Zero unless the building states a rating AND a fuel endurance: `has_generator` alone is a
+    structural fact (there is a set in the yard) and says nothing about whether it can carry this
+    load or for how long.
+
+    Returns 0.0 if the set is too small for the load rather than modelling a partial contribution.
+    Load-shedding onto an undersized generator is an operational decision this model has no basis
+    to assume, and crediting a fraction of the load would silently invent that decision.
+    """
+    if not b.has_generator or b.generator_runtime_h <= 0 or b.generator_rated_kw <= 0:
+        return 0.0
+    if b.critical_load_kw > b.generator_rated_kw:
+        return 0.0
+    return b.generator_runtime_h
+
+
 def backup_duration_h(b: Building, day: pd.DataFrame, start_hour: int) -> float:
     """
-    Energy-balance backup: battery + solar generated during the outage serving the
+    Energy-balance backup: the generator's fuel endurance, then battery + solar serving the
     critical load. Returns hours the critical load can be sustained from outage start.
+
+    The generator was previously absent from this calculation entirely. That was a real defect,
+    not a simplification: the Decennial Block has a surveyed 62.5 kVA set with ~14 h of fuel and
+    an automatic transfer switch, and the model reported 3.4 h of backup and scored the shelter as
+    failing its 12 h requirement. Two CERI sub-scores worth 60% of the index rested on that.
+
+    Sequencing: the generator runs first and the battery follows. That is what the ATS actually
+    does — it transfers to the set on mains loss, leaving storage intact as the reserve behind it.
+    Modelling the battery first would drain the reserve while fuel sat in the tank.
+
+    Simplification, stated: solar generated while the generator runs is not credited to the
+    battery. It would extend ride-through further, so the figure errs conservative.
     """
-    stored = b.battery_kwh
     load = b.critical_load_kw
     if load <= 0:
         return float("inf")
+
+    gen_h = generator_hours(b)
+
+    stored = b.battery_kwh
     hours = 0.0
     rows = day.reset_index(drop=True)
     for i in range(start_hour, len(rows)):
@@ -180,7 +217,16 @@ def backup_duration_h(b: Building, day: pd.DataFrame, start_hour: int) -> float:
                 hours += stored / deficit  # partial final hour
                 stored = 0.0
                 break
-    return round(hours, 1)
+
+    # Generator endurance plus the stored-energy tail behind it.
+    #
+    # The battery phase is evaluated from `start_hour` rather than from the hour the generator
+    # actually runs dry. Shifting it would be more precise, but the weather frame is a single day
+    # and a 14 h generator run would walk off the end of it. Not shifting is the conservative
+    # choice here: an outage starting mid-afternoon would, once shifted, put the battery phase at
+    # dawn with more solar behind it, so the unshifted figure understates ride-through rather than
+    # flattering it.
+    return round(gen_h + hours, 1)
 
 
 def analyze_outage(

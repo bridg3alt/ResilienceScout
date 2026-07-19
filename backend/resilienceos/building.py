@@ -77,6 +77,12 @@ class Building:
     solar_kwp: float = 20.0               # rooftop PV capacity
     battery_kwh: float = 0.0
     has_generator: bool = False
+    # Generator capability. Both default to 0.0, so a building that merely sets has_generator=True
+    # contributes no energy — the generator is then structurally present but carries nothing, which
+    # is the behaviour every caller had before these fields existed. Only a building that states
+    # its rating AND its fuel endurance gets credit for the set.
+    generator_rated_kw: float = 0.0       # continuous electrical output it can actually carry
+    generator_runtime_h: float = 0.0      # hours it can run on the fuel on site
     # Comfort / operations
     t_set_cooling: float = 26.0
     critical_load_kw: float = 5.0         # loads that must stay powered in an outage

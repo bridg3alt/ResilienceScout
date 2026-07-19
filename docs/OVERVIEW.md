@@ -46,7 +46,7 @@ weather.py ──► building.py ──► twin.py            low-data physics-i
 | `twin.py` | Hour-by-hour 5R1C thermal simulation. |
 | `solar.py` | PV generation from GHI + temperature. |
 | `hazard.py` | Heatwave, outage, and **flood** analysis. Flood decides *which* DER survives; the existing energy-balance model (`backup_duration_h`) decides how long it lasts. |
-| `presets.py` | **The data-provenance chokepoint.** Flood line, equipment elevations, shelter inventory, population. Three tiers: SOURCED (measured/cited), DERIVED (bounded from a surveyed input + a cited standard), INVENTED (`TODO(user)`), with `SURVEYED_VALUES` / `DERIVED_VALUES` / `UNSURVEYED_VALUES` as the machine-readable registries the UI notice is derived from. |
+| `presets.py` | **The data-provenance chokepoint.** Flood line, equipment elevations, shelter inventory, population. Four tiers: SOURCED (measured/cited), DERIVED (bounded from a surveyed input + a cited standard), REPORTED (stated by the site owner, unverified), INVENTED (`TODO(user)`), with `SURVEYED_VALUES` / `DERIVED_VALUES` / `REPORTED_VALUES` / `UNSURVEYED_VALUES` as the machine-readable registries the UI notice is derived from. |
 | `dependency_graph.py` | Shelter → panel → transformer/solar/battery/generator. `single_points_of_failure()` — OR across sources, AND through the panel. |
 | `recovery.py` | Exhaustive minimum-effort repair set per shelter, ranked by population restored per repair-hour. |
 | `engine.py` | `ceri_score` (flood readiness) + `resilience_score` (heat). Transparent sub-scores; **upper-clamp only** — flooring a reward term is what once made the heat score blind to real gains. |
@@ -54,13 +54,67 @@ weather.py ──► building.py ──► twin.py            low-data physics-i
 | `copilot/` | ChromaDB RAG (→ TF-IDF fallback) grounded in live sim numbers, Groq LLM (optional). |
 | `report.py`, `api.py` | Report generation, FastAPI JSON surface. |
 
+## Headline finding — the shelter's resilience rests on 3 centimetres
+
+Once the generator is modelled (see below), CERI collapses across a 2 cm band of flood depth:
+
+| Flood depth | CERI | Band | State |
+|---|---|---|---|
+| 0.84 m | 76 | Resilient | generator dry, carries the load |
+| 0.86 m | 16 | Critical | generator inundated, no backup at all |
+
+The generator sits at **0.85 m** above finished floor. The observed August 2018 high-water mark is
+**0.82 m**. The entire difference between a resilient shelter and a critical one is a **3 cm**
+margin.
+
+And that margin is **smaller than the survey's own uncertainty**: `SURVEY_UNCERTAINTY_M` is 0.03 m
+at 1σ, so `AT_RISK_MARGIN_M` is 0.06 m at 2σ. The model therefore cannot honestly say whether the
+generator flooded in 2018 — the margin is inside the error bars, which is exactly why
+`node_health` reports it `at_risk` rather than `ok` at that depth.
+
+This is the most decision-relevant output the project has, and it is not a modelling artefact: it
+falls out of two surveyed measurements. It also gives the retrofit recommendation its point —
+raising one generator plinth by 30 cm is cheap, and moves the shelter across the entire band.
+
+## Generator modelling — a defect fixed, and why it mattered
+
+The generator was originally in the dependency graph but contributed **zero energy**:
+`backup_duration_h` summed battery and solar only, and `ceri_score`'s `energy_readiness` divided by
+`battery_kwh` alone while describing itself as "DER capable of carrying critical load".
+
+So the repo simultaneously documented a surveyed 62.5 kVA set with ~14 h of fuel and an ATS, and
+reported **3.4 h** of backup with the shelter failing its 12 h requirement. Those two sub-scores are
+**60% of CERI**. That was an internal contradiction, not a simplification.
+
+A second defect surfaced on fixing the first: `energy_readiness` read the building's **nameplate**
+rather than `flood.surviving_der`, so it returned the same figure at every depth. A readiness
+sub-score that cannot move with the hazard is not measuring readiness against that hazard. Both now
+read the post-flood resource set.
+
+**What is modelled, and what is assumed:**
+
+- `generator_rated_kw = 50.0` — DERIVED: 62.5 kVA × 0.8 power factor. The 0.8 pf is the standard
+  assumption for a diesel set, stated rather than measured. Well above the 18 kW critical load, so
+  endurance binds, not capacity.
+- `generator_runtime_h = 14.0` — SOURCED, used **unscaled as a floor**. The survey gives one point
+  on the fuel curve (220 L, ~14 h at 70% load ≈ 35 kW). The real critical load is ~18 kW, so the set
+  would run considerably longer — but scaling 15.7 L/h linearly by 18/35 would assume away the
+  no-load consumption and overstate endurance, and fitting the curve needs a second fuel figure
+  nobody measured. 14 h is the conservative end of a range whose top is unknown.
+- **Sequencing** — generator first, battery behind it. That is what the ATS does; draining storage
+  while fuel sits in the tank would be the wrong way round.
+- **Undersized sets contribute nothing** rather than a partial load. Load-shedding onto a small
+  generator is an operational decision this model has no basis to assume.
+- **Solar during the generator run is not credited** to the battery, and the battery phase is not
+  time-shifted past the generator run. Both err conservative.
+
 ## CERI — Climate Energy Readiness Index
 
 0–100, four transparent sub-scores (`engine.ceri_score`):
 
 | Sub-score | Weight | What it measures |
 |---|---|---|
-| `energy_readiness` | 0.30 | DER (battery) capacity vs the critical load × required backup window |
+| `energy_readiness` | 0.30 | Surviving DER — battery storage **and** generator fuel endurance — vs the critical load × required backup window. Reads `flood.surviving_der`, so it falls as assets drown |
 | `flood_readiness` | 0.25 | Logistic on the weakest power asset's elevation margin over the flood line |
 | `backup_duration` | 0.30 | Surviving ride-through vs `REQUIRED_BACKUP_H` |
 | `critical_vulnerabilities` | 0.15 | Single points of failure in the dependency graph |
@@ -119,7 +173,7 @@ are stored alongside the converted depth so the conversion stays auditable.
 - **Weather.** Live Open-Meteo forecast + history. Verified resolving at the corrected campus
   coordinates (Kodakara: 10.3595, 76.2859) — ~23 °C, 99% RH, monsoon-plausible for July.
 - **All the logic** — flood inundation per asset, dependency-graph SPOF detection, exhaustive
-  recovery search, CERI scoring, budget optimization. Covered by 68 passing regression tests.
+  recovery search, CERI scoring, budget optimization. Covered by 74 passing regression tests.
 - **Campus coordinates.** SOURCED and corrected: were 10.5276, 76.2144 (Thrissur *city*,
   ~19 km north — every weather call was keyed to the wrong town). Now the Kodakara campus.
 
@@ -223,7 +277,7 @@ named values with measurements. **[docs/SURVEY.md](SURVEY.md)** §7 is exactly w
 ## Verify
 
 ```bash
-python -m pytest              # 68 regression tests — flood domain + datum + scoring + provenance
+python -m pytest              # 74 regression tests — flood domain + datum + scoring + provenance
 cd backend
 python validate_physics.py    # twin physics sanity (live weather)
 python smoke_pipeline.py      # heatwave → outage → score → plan → retrofits

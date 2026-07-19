@@ -531,3 +531,86 @@ def test_a_reported_claim_is_used_but_still_challenged(site, building, mild_day)
     s = unassessed_sensitivity(g)
     assert "substation" in s["unassessed"]
     assert s["powered_if_unassessed_fail"] <= s["powered_if_unassessed_survive"]
+
+
+# --- Generator in the energy model -------------------------------------------------------------
+# The generator was once in the dependency graph but absent from every energy calculation, so the
+# repo documented a surveyed 62.5 kVA set with 14 h of fuel while reporting 3.4 h of backup. These
+# pin the fix.
+
+
+def test_generator_contributes_its_fuel_endurance_to_backup(building, mild_day):
+    """A surveyed set with fuel must carry the load, not sit in the model as decoration."""
+    from resilienceos.hazard import generator_hours
+    from dataclasses import replace
+
+    assert generator_hours(building) == 14.0
+
+    without = replace(building, has_generator=False, generator_runtime_h=0.0)
+    with_gen = analyze_flood(building, mild_day, 0.0).backup_hours
+    no_gen = analyze_flood(without, mild_day, 0.0).backup_hours
+
+    assert with_gen > no_gen
+    # The set's full endurance shows up, not a token contribution.
+    assert with_gen - no_gen == pytest.approx(14.0, abs=0.1)
+
+
+def test_generator_alone_is_not_enough_without_a_rating_and_fuel(building):
+    """
+    has_generator is a structural fact ("there is a set in the yard"), not an energy claim. A
+    building that flips the flag without stating endurance must get no credit — otherwise every
+    legacy caller silently gains free backup hours.
+    """
+    from resilienceos.hazard import generator_hours
+    from dataclasses import replace
+
+    assert generator_hours(replace(building, generator_runtime_h=0.0)) == 0.0
+    assert generator_hours(replace(building, generator_rated_kw=0.0)) == 0.0
+
+
+def test_an_undersized_generator_contributes_nothing_rather_than_a_partial_load(building):
+    """
+    Load-shedding onto a set too small for the critical load is an operational decision the model
+    has no basis to assume, so it credits zero rather than inventing a fraction.
+    """
+    from resilienceos.hazard import generator_hours
+    from dataclasses import replace
+
+    tiny = replace(building, generator_rated_kw=building.critical_load_kw - 1.0)
+    assert generator_hours(tiny) == 0.0
+
+
+def test_drowning_the_generator_removes_its_hours(building, mild_day):
+    """EQUIPMENT_EFFECT must zero the runtime, not just the flag."""
+    dry = analyze_flood(building, mild_day, 0.80)    # generator sits at 0.85 m
+    wet = analyze_flood(building, mild_day, 0.90)
+    assert "generator" not in dry.failed_equipment
+    assert "generator" in wet.failed_equipment
+    assert wet.surviving_der["generator_hours"] == 0.0
+    assert wet.backup_hours < dry.backup_hours
+
+
+def test_energy_readiness_responds_to_the_flood_not_just_the_nameplate(site, building, mild_day):
+    """
+    Guards the second defect: energy_readiness read the building's nameplate, so it returned an
+    identical figure at every depth. A readiness sub-score that cannot move with the hazard is not
+    measuring readiness against that hazard.
+    """
+    dry = analyze_flood(building, mild_day, 0.0)
+    wet = analyze_flood(building, mild_day, 1.2)     # battery and generator both under
+    dry_c = ceri_score(dry, build_graph(site, building, dry), building)
+    wet_c = ceri_score(wet, build_graph(site, building, wet), building)
+
+    assert dry_c["components"]["energy_readiness"] > wet_c["components"]["energy_readiness"]
+
+
+def test_the_generator_margin_is_inside_the_survey_uncertainty():
+    """
+    The project's headline finding, asserted so it cannot rot: the generator clears the observed
+    2018 mark by 3 cm, which is SMALLER than the survey's own 2-sigma uncertainty. The model
+    therefore cannot honestly claim it stayed dry in 2018 — which is why node_health reports
+    at_risk rather than ok at that depth.
+    """
+    margin = presets.EQUIPMENT_ELEVATION_M["generator"] - presets.FLOOD_LINE_M
+    assert round(margin, 2) == 0.03
+    assert margin < presets.AT_RISK_MARGIN_M, "margin escaped the error bars; re-check the finding"

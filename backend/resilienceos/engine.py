@@ -80,8 +80,22 @@ def ceri_score(flood, graph: dict, b: Building) -> dict:
 
     # DER capable of carrying critical load. Ratio >= 1 means fully covered; upper-clamped
     # because over-provisioning past the need earns no more credit.
+    #
+    # Two defects fixed here together, both of which made this sub-score blind:
+    #
+    #   1. It read `battery_kwh` alone while calling itself "DER capable of carrying critical
+    #      load", so a shelter with a surveyed 62.5 kVA set and 14 h of fuel scored as if it had
+    #      none — the same omission that kept the generator out of backup_duration_h.
+    #   2. It read the building's NAMEPLATE rather than what survived the flood, so it returned an
+    #      identical figure at every depth. A sub-score that cannot move with the hazard is not
+    #      measuring readiness against that hazard.
+    #
+    # Now sourced from `flood.surviving_der`, so drowning the battery or the generator lowers it.
+    # Together with backup_duration this is 60% of CERI.
+    surviving = flood.surviving_der
     if b.critical_load_kw > 0:
-        der_cover = (b.battery_kwh / b.critical_load_kw) / presets.REQUIRED_BACKUP_H
+        battery_h = surviving["battery_kwh"] / b.critical_load_kw
+        der_cover = (battery_h + surviving.get("generator_hours", 0.0)) / presets.REQUIRED_BACKUP_H
     else:
         der_cover = 1.0
     energy_readiness = min(1.0, der_cover)
