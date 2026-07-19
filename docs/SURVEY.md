@@ -207,6 +207,11 @@ relief centres (relaxed to 2.5 m² in mountainous areas — not applicable to Ko
 
 > capacity ≈ usable covered floor area (m²) ÷ 3.5
 
+**This is now implemented as a bound** — `presets.shelter_capacity_upper_bound()`, computed from
+the *gross* surveyed area (1450 m²) because usable area is not yet known. It yields **414**, which
+is *below* the standing placeholder of 500. See §7.1: the guess is not merely unmeasured, it is
+inconsistent with the surveyed area under the governing standard.
+
 **If you derive it, record that it was derived, not counted.** Write the floor area you used and
 the date. A derived number is defensible; a derived number presented as a census is not.
 
@@ -294,12 +299,79 @@ This is the project's remaining data ask.
 
 | Value | Why it matters | How it closes |
 |---|---|---|
-| `pop_served` | Drives the entire recovery ranking — which shelter gets fixed first | Institution's shelter capacity records or disaster-management plan; failing that, derive from floor area at 3.5 m²/person (KSDMA Ed. 1) and **label it derived** — §4 |
-| `critical_load_kw` | Divides into `backup_hours`; a 10% error moves every ride-through figure on the dashboard | Survey team confirms which of the two records is right, or which line item changed between them. Do **not** scale the itemisation to force agreement — §6 |
-| `substation_elevation` | Unmeasured, so the substation never floods in the model and SPOF detection is incomplete | One height measurement, same method as §2 |
-| `REPAIR_EFFORT_H` | Substation falls through to a generic 8 h default, unrealistic for an 11 kV asset | Interview with the maintenance supervisor — §5 |
+| `pop_served` | Drives the entire recovery ranking — which shelter gets fixed first | Institution's shelter capacity records or disaster-management plan. **Now bounded from a desk** at ≤414 — see §7.1 |
+| `critical_load_kw` | Divides into `backup_hours`; a 10% error moves every ride-through figure on the dashboard | Survey team confirms which of the two records is right, or which line item changed between them. Do **not** scale the itemisation to force agreement — §6. **Now reported as a range** rather than a point — §7.1 |
+| `substation_elevation` | Unmeasured, so the substation never floods in the model and SPOF detection is incomplete | One height measurement, same method as §2. **Its cost is now priced** by `unassessed_sensitivity()` — §7.1 |
+| `REPAIR_EFFORT_H` | Substation falls through to a generic 8 h default, unrealistic for an 11 kV asset | Interview with the maintenance supervisor — §5. **Now declared** as a fallback in every plan that uses it — §7.1 |
 
 **Route for anything needing an MSL tie:** per the ILDM/SoI report §5.2(iii), the state CORS
 network, geoid model and SoI benchmark network make this a few minutes of GNSS observation, not a
 levelling expedition. Trained teams exist at SoI, the State Survey Department, KLRMM and the River
 Management Centre, coordinated through ILDM.
+
+---
+
+### 7.1 What was closed WITHOUT a site visit
+
+None of these four can be *measured* from a desk, and none of them has been. What follows is what
+could be done instead: bound them, price them, or declare them. Each is implemented and tested.
+
+They deliberately do **not** clear `DATA_IS_PLACEHOLDER`. A bound is not a measurement, and the
+notice must not soften just because the gaps are now better characterised. `presets.DERIVED_VALUES`
+is a separate registry from `SURVEYED_VALUES` for exactly this reason — so the dashboard can never
+present a derivation as a survey.
+
+**`pop_served` — bounded, and the bound contradicts the guess.**
+Capacity cannot exceed surveyed floor area ÷ the KSDMA minimum covered area per person:
+1450 m² ÷ 3.5 = **414 people**. The standing `pop_served` is 500. So it is not merely unmeasured —
+it is *inconsistent with the surveyed floor area under the governing standard*, and it errs toward
+overstating how many people each repair restores. `presets.pop_served_exceeds_area_bound()` asserts
+this, and the test fails the day someone replaces 500 with a real figure — which is the prompt to
+re-check the new number against the same ceiling.
+This is an **upper bound only**. Gross floor area counts corridors, stairwells, toilets and plant
+rooms as sleepable, so true capacity is strictly lower. Inventing a usable-area fraction to
+"improve" the estimate would fabricate the very measurement the bound exists to avoid.
+
+**`critical_load_kw` — reported as the interval, never averaged.**
+The two records (18.0 reported, 20.0 itemised) bracket the load. `/api/sites/{id}/backup` now
+returns `hours_range` computed at *both* ends, plus `adequate_worst_case`. When that disagrees with
+`adequate`, whether the shelter meets its backup target depends on an unsettled survey record —
+which is precisely what must not be rounded away. Averaging to 19.0 would produce a number neither
+record supports and would hide the disagreement behind false precision.
+
+**`substation_elevation` — its absence is now priced, not inherited.**
+The model can never flood an asset it has no elevation for, so every result silently assumed the
+substation survived. `dependency_graph.unassessed_sensitivity()` runs the graph *both* ways — all
+unassessed assets dry, then all failed — and reports whether the shelter's outcome actually turns
+on the gap. It does not tell us whether the substation floods; it tells us how much it matters that
+we do not know, which is what decides whether the measurement is worth prioritising.
+
+**`REPAIR_EFFORT_H` — the guess is declared rather than dressed up.**
+The generic 8 h fallback is *kept*, deliberately. Inflating it to something "safer" would be
+equally invented and would additionally bias the ranking by making grid restoration look
+unattractive on fabricated grounds. Instead `recovery.effort_is_estimated()` marks it, and every
+ranked plan carries `estimated_effort_repairs` — so a reader can see which parts of a ranking rest
+on a fallback.
+
+### 7.2 Getting the rest without going to campus
+
+The highest-value remaining items are **documents, not measurements** — they can be requested
+remotely. In rough order of value per unit of effort:
+
+| Ask | From whom | Closes |
+|---|---|---|
+| Single-line diagram (§1) | Estate / Facilities Officer, by email | Grid topology, clinic/pump dependencies, and usually the substation's location |
+| Approved building floor plans | Estate Office or the original architect | Usable (not gross) floor area → tightens the `pop_served` bound from an upper limit toward an estimate |
+| Institutional disaster-management plan | Principal's office / NSS or NCC unit | `pop_served` directly, as a counted figure |
+| The two conflicting load records (§6) | The survey team that produced them | `critical_load_kw` — this needs one email asking which line item changed, not a re-survey |
+| Maintenance contract / AMC schedule | Estate Office | `REPAIR_EFFORT_H` — AMC documents usually state response and restoration times per asset class |
+| KSEB restoration log for the 2018 event | KSEB section office, or the institution's own outage records | Would let `REQUIRED_BACKUP_H = 12` be *defended* locally instead of remaining a bare design choice |
+
+**A remotely-obtained figure is still a sourced figure**, provided the provenance says so. Record
+who supplied it, when, and in what document — the same discipline §3 applies to a tape measure. A
+floor plan emailed by the Estate Office is better evidence than a number someone recalled on site.
+
+**What genuinely cannot be done remotely:** the two remaining asset elevations
+(`solar_panels`, `road_access`), the substation elevation, and the photographic record. These need
+someone physically present with a tape. If no visit is possible at all, they stay open — and the
+dashboard keeps saying so, which is the correct outcome rather than a failure of the tool.

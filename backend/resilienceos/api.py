@@ -16,7 +16,9 @@ from pydantic import BaseModel
 
 from .building import Building
 from . import presets, weather as wx
-from .dependency_graph import build_graph, downstream, failed_nodes, single_points_of_failure
+from .dependency_graph import (
+    build_graph, downstream, failed_nodes, single_points_of_failure, unassessed_sensitivity,
+)
 from .hazard import analyze_flood, analyze_heatwave, analyze_outage
 from .engine import ceri_score, resilience_score, operational_plan, outage_sequence
 from .recovery import prioritize, restoration_plan
@@ -87,6 +89,8 @@ def health():
         "placeholder_data": presets.DATA_IS_PLACEHOLDER,
         "unsurveyed": presets.UNSURVEYED_VALUES,
         "surveyed_count": len(presets.SURVEYED_VALUES),
+        "reported_count": len(presets.REPORTED_VALUES),
+        "derived_count": len(presets.DERIVED_VALUES),
     }
 
 
@@ -238,6 +242,27 @@ def api_sites():
         # was surveyed is the accurate framing now that most of it has been.
         "unsurveyed": presets.UNSURVEYED_VALUES,
         "surveyed": presets.SURVEYED_VALUES,
+        # What has been bounded from a desk without a site visit. Separate from `surveyed` on
+        # purpose: a derivation constrains a value, it does not measure it, and merging the two
+        # would let the dashboard imply a survey that never happened.
+        "derived": presets.DERIVED_VALUES,
+        # Stated by the site owner but never checked. Its own tier for the same reason: a verbal
+        # assurance is real information and must not be shown as a measurement.
+        "reported": presets.REPORTED_VALUES,
+        "capacity_check": {
+            s["id"]: {
+                "pop_served_claimed": s["pop_served"],
+                "area_upper_bound": presets.shelter_capacity_upper_bound(s["id"]),
+                "exceeds_bound": presets.pop_served_exceeds_area_bound(s["id"]),
+                "overstated_by": presets.pop_served_overstatement(s["id"]),
+                "basis": (
+                    f"{s['building']['floor_area_m2']:.0f} m2 surveyed floor area / "
+                    f"{presets.SHELTER_AREA_PER_PERSON_M2} m2 per person "
+                    "(Kerala State Minimum Standards of Relief, KSDMA Ed. 1, 9 Jul 2020)"
+                ),
+            }
+            for s in presets.SHELTERS
+        },
     }
 
 
@@ -256,11 +281,42 @@ def api_ceri(site_id: str, phase: str = "preparedness", flood_depth_m: float | N
     }
 
 
+def _backup_across_load_range(site_id: str, depth: float, repaired: frozenset[str]) -> dict:
+    """
+    Ride-through recomputed at BOTH ends of the unreconciled critical load.
+
+    The survey recorded critical load twice and the records disagree (18.0 kW reported, 20.0 kW
+    itemised). `critical_load_kw` carries the lower one, so the headline backup figure is the
+    optimistic reading of a number nobody has settled. Reporting only that would present a
+    disagreement as a fact.
+
+    So the endpoint reports the interval. `hours_available` stays the model's own figure for
+    backward compatibility; `hours_range` is what the dashboard should show.
+    """
+    low_kw, high_kw = presets.critical_load_range_kw()
+    site = presets.get_shelter(site_id)
+    day = _day_for(site["building"]["latitude"], site["building"]["longitude"])
+
+    hours = {}
+    for label, load_kw in (("high_load", high_kw), ("low_load", low_kw)):
+        b = Building(**{**site["building"], "critical_load_kw": load_kw})
+        hours[label] = analyze_flood(b, day, depth, repaired=repaired).backup_hours
+
+    # Higher load drains storage faster, so the pessimistic end is the one to lead with.
+    return {
+        "critical_load_range_kw": [low_kw, high_kw],
+        "critical_load_reconciled": presets.critical_load_is_reconciled(),
+        "hours_min": hours["high_load"],
+        "hours_max": hours["low_load"],
+    }
+
+
 @app.get("/api/sites/{site_id}/backup")
 def api_backup(site_id: str, phase: str = "active_flood", flood_depth_m: float | None = None):
     depth = _effective_depth(site_id, phase, flood_depth_m)
     repaired = _repaired_for(phase, site_id, depth)
     site, _b, _day, flood, _graph = _site_state(site_id, depth, repaired)
+    rng = _backup_across_load_range(site_id, depth, repaired)
     return {
         "site_id": site_id,
         "site_name": site["name"],
@@ -269,6 +325,11 @@ def api_backup(site_id: str, phase: str = "active_flood", flood_depth_m: float |
         "hours_available": flood.backup_hours,
         "hours_required": flood.required_backup_h,
         "adequate": flood.operational,
+        # Adequacy at the PESSIMISTIC end of the load disagreement. When this differs from
+        # `adequate`, whether the shelter meets its backup target depends on an unsettled survey
+        # record — which is exactly the kind of thing that must not be rounded away.
+        "adequate_worst_case": rng["hours_min"] >= flood.required_backup_h,
+        "hours_range": rng,
         "surviving_der": flood.surviving_der,
         "failed_equipment": flood.failed_equipment,
         "placeholder": flood.placeholder,
@@ -287,6 +348,10 @@ def api_dependency_graph(site_id: str, phase: str = "active_flood",
         "phase": phase,
         "flood_depth_m": depth,
         "single_points_of_failure": spofs,
+        # What the unmeasured elevations are worth. The model can never flood an asset it has no
+        # elevation for, so every result here quietly assumes those assets survived; this reports
+        # whether that assumption is actually load-bearing for the outcome.
+        "unassessed_sensitivity": unassessed_sensitivity(graph),
         # precomputed so the detail drawer doesn't need a round-trip per node
         "cascades": {n["id"]: downstream(graph, n["id"]) for n in graph["nodes"]},
     }
@@ -313,11 +378,15 @@ def api_shelter_status(phase: str = "active_flood", flood_depth_m: float | None 
             "failed_equipment": flood.failed_equipment,
             "ceri": c["score"],
             "band": c["band"],
+            # Ride-through at BOTH ends of the unreconciled critical load, so the board can show
+            # the pessimistic reading next to the headline instead of only the flattering one.
+            "backup_range": _backup_across_load_range(s["id"], depth, repaired),
         })
     return {
         "phase": phase,
         "flood_depth_m": last_depth,
         "shelters": rows,
+        "critical_load_reconciled": presets.critical_load_is_reconciled(),
         "placeholder": presets.DATA_IS_PLACEHOLDER,
     }
 

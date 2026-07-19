@@ -4,9 +4,21 @@ ResilienceScout — the data-provenance chokepoint.
 Every campus-specific number the model depends on lives here, so that replacing an assumption
 with a measurement is a one-file job rather than an archaeology expedition.
 
-Two epistemic tiers, and the comments say which is which:
+Four epistemic tiers, and the comments say which is which:
   * SOURCED  — a real, measured or cited value. Carries its provenance, and no TODO.
+  * DERIVED  — not measured here, but COMPUTED from a surveyed input plus a published standard,
+               with both named. Weaker than SOURCED, categorically stronger than a guess,
+               because a reader can recheck the arithmetic and challenge the citation.
+  * REPORTED — stated by the site owner (college facilities staff, institutional records) but not
+               independently verified. Weaker than SOURCED because nobody checked it; far stronger
+               than INVENTED because it has a named human source who can be asked again.
   * INVENTED — a guess. Carries a TODO(user).
+
+The DERIVED tier exists because some gaps can be closed from a desk and some cannot, and
+collapsing that distinction wastes the ones that can. It is NOT a way to retire a TODO quietly:
+a derived value stays in UNSURVEYED_VALUES until it is actually measured. What it buys is a
+defensible number to reason with, and — as with shelter capacity below — sometimes a derivation
+CONTRADICTS the standing guess, which is a finding in itself.
 
 After the site surveys of the Decennial Block (latest 2026-07-18) the SOURCED tier is now the
 large majority: the vertical datum, the 2018 flood mark, six of eight equipment elevations and
@@ -27,25 +39,65 @@ from __future__ import annotations
 # Remove an entry ONLY when the value it names has been replaced with a surveyed figure. When the
 # last entry goes, DATA_IS_PLACEHOLDER becomes False on its own and the notice disappears.
 UNSURVEYED_VALUES: dict[str, str] = {
-    "pop_served": (
-        "Shelter capacity is still the pre-survey 500. The survey measured DAILY OCCUPANCY "
-        "(350–450), which is a different quantity — occupancy counts who is normally in the "
-        "building, capacity counts who could shelter there. Drives the whole recovery ranking."
-    ),
     "REPAIR_EFFORT_H": (
         "The substation has no surveyed repair estimate, so recovery.py falls through to a "
-        "generic 8 h default — unlikely to be right for an 11 kV asset."
-    ),
-    "substation_elevation": (
-        "Never measured, so it has no entry in EQUIPMENT_ELEVATION_M and therefore never floods "
-        "in the model. Its graph node reads 'unknown' rather than 'ok' so the gap stays visible."
-    ),
-    "critical_load_kw": (
-        "The survey recorded critical load twice and the records disagree: the circuit "
-        "itemisation sums to 20.0 kW against a reported total of 18.0 kW. Divides into "
-        "backup_hours, so a 10% error moves every ride-through figure on the dashboard."
+        "generic 8 h default — unlikely to be right for an 11 kV asset. Now only load-bearing if "
+        "the college's report that the substation sits above flood level turns out to be wrong: "
+        "while that holds, the substation never fails and never enters a repair plan."
     ),
 }
+
+# --- Reported by the site owner, NOT independently verified -------------------------------------
+# Values stated by Sahrdaya College facilities staff and recorded on the author's account of that
+# conversation. There is no survey record, no document reference and no instrument reading behind
+# any of them.
+#
+# This tier exists because the alternative was worse in both directions. Treating a statement from
+# the people who run the building as if it were a guess throws away real knowledge; treating it as
+# a measurement claims a rigour that was never applied. Naming it for what it is lets the model use
+# the figure while leaving a reviewer free to weigh it — and leaves an obvious next step, which is
+# simply to get it in writing.
+#
+# These do NOT clear DATA_IS_PLACEHOLDER on their own, but they are reported separately from
+# UNSURVEYED_VALUES so the dashboard can distinguish "nobody knows" from "the college says, but
+# nobody has checked".
+#
+# TODO(user): ask the Estate / Facilities Officer to confirm each of these BY EMAIL. A one-line
+# written reply converts all three from REPORTED to SOURCED at zero cost and no site visit, and is
+# the single highest-value follow-up left on the project — see docs/SURVEY.md §7.2.
+REPORTED_VALUES: dict[str, str] = {
+    "pop_served": (
+        "Shelter capacity of 400 reported by college staff. Supersedes the invented pre-survey "
+        "500, which exceeded what the floor area allows. 400 sits WITHIN the independently "
+        "derived ceiling of 414 (see shelter_capacity_upper_bound), so the report and the "
+        "surveyed floor area corroborate each other — a genuine cross-check, not a coincidence "
+        "worth glossing over."
+    ),
+    "critical_load_kw": (
+        "College confirms the reported total of 18.0 kW is the correct figure, resolving which "
+        "of the two survey records to use. NOTE this does not make the records agree: the "
+        "circuit itemisation still sums to 20.0 kW, so there is an error of 2.0 kW somewhere in "
+        "that breakdown which nobody has located. Kept visible via critical_load_discrepancy_kw()."
+    ),
+    "substation_flood_exposure": (
+        "College reports the 11 kV substation sits on notably high ground and did not flood in "
+        "2018. Recorded as a flood-exposure claim rather than an elevation, because no height "
+        "was given and inventing one would fabricate a measurement. Modelled via "
+        "REPORTED_ABOVE_FLOOD below; unassessed_sensitivity() still prices what happens if the "
+        "report is wrong."
+    ),
+}
+
+# Assets the site owner reports as sitting above any credible flood level, WITHOUT giving a height.
+#
+# Deliberately a set of names rather than an elevation dict: the college said "high ground", not
+# "2.4 m". Writing a number here to make the arithmetic work would invent the very measurement
+# this file exists to protect. So the claim is modelled at the resolution it was actually made —
+# binary, not metric — and node_health reports these as "ok (reported)" rather than "unknown".
+#
+# The claim is used AND still tested: unassessed_sensitivity() continues to run the graph with
+# these assets failed, so the cost of the report being wrong stays visible on the dashboard.
+REPORTED_ABOVE_FLOOD: frozenset[str] = frozenset({"substation"})
 
 # What IS measured. Kept alongside so the dashboard can lead with it: a notice that names only
 # the gaps reads as though nothing has been done, which stopped being true after the 2026-07
@@ -59,7 +111,31 @@ SURVEYED_VALUES: dict[str, str] = {
     "grid_topology": "Campus 11 kV substation confirmed as the feed, upstream of the 250 kVA transformer",
 }
 
+# What has been CONSTRAINED without a site visit — computed from a surveyed input plus a cited
+# public standard. Each entry names the inputs and the source, so the arithmetic is recheckable.
+#
+# These deliberately do NOT clear their UNSURVEYED_VALUES entries. A derivation bounds a value;
+# it does not measure it. The registry stays the record of what is still unmeasured, and this is
+# the record of how far the unmeasured values have been pinned down from a desk.
+DERIVED_VALUES: dict[str, str] = {
+    "pop_served_upper_bound": (
+        "Shelter capacity cannot exceed floor_area_m2 (1450, surveyed) / 3.5 m2 per person "
+        "(Kerala State Minimum Standards of Relief, KSDMA Ed. 1, 9 Jul 2020) = 414 people. The "
+        "college-reported 400 sits within this ceiling, so the report is consistent with the "
+        "surveyed floor area — the bound now corroborates the figure instead of contradicting it."
+    ),
+    "critical_load_range_kw": (
+        "The two disagreeing survey records (18.0 reported, 20.0 itemised) bound the true load "
+        "rather than being averaged. Backup duration is reported across the full range so the "
+        "dashboard shows the pessimistic end instead of only the flattering one."
+    ),
+}
+
 # Derived, never hand-set. True while any value above remains unmeasured.
+#
+# Note this reads UNSURVEYED_VALUES only. DERIVED_VALUES deliberately does not clear the flag:
+# bounding a number from a desk is real progress, but it is not a measurement, and the notice
+# must not soften just because the remaining gaps are now better characterised.
 DATA_IS_PLACEHOLDER = bool(UNSURVEYED_VALUES)
 
 # --- Vertical datum ---------------------------------------------------------------------------
@@ -348,13 +424,16 @@ SHELTERS = [
     {
         "id": "decennial_block",
         "name": "Decennial Block — Sahrdaya College of Engineering, Kodakara",
-        # TODO(user): OPEN QUESTION — deliberately NOT overwritten by the survey. The survey
-        # reported 350–450 DAILY OCCUPANCY, which is a different quantity from shelter capacity
-        # during a flood (occupancy counts who is normally in the building; capacity counts who
-        # could be sheltered there). 500 is the earlier placeholder, retained only so the model
-        # runs. pop_served drives the entire recovery ranking, so this needs a real answer —
-        # from the disaster-management plan, not from occupancy — before any ranking is acted on.
-        "pop_served": 500,
+        # REPORTED: 400, stated by college staff. Supersedes the invented 500, which exceeded
+        # what the floor area allows under the KSDMA standard (see shelter_capacity_upper_bound
+        # = 414). That 400 lands inside that independently derived ceiling is a real cross-check:
+        # two unrelated routes — a verbal report and surveyed floor area ÷ a published standard —
+        # agree to within 3.5%. Note this is corroboration, NOT verification; both could still be
+        # describing normal occupancy rather than flood-shelter capacity.
+        #
+        # TODO(user): get it in writing. One email to the Estate Officer promotes this from
+        # REPORTED to SOURCED. Until then it stays in REPORTED_VALUES.
+        "pop_served": 400,
         "building": {
             "name": "Decennial Block — Sahrdaya College of Engineering, Kodakara",
             # SOURCED: Sahrdaya College of Engineering & Technology, Kodakara, Thrissur campus
@@ -370,17 +449,93 @@ SHELTERS = [
             # SOURCED: surveyed — 62.5 kVA diesel, 220 L tank, ~14 h runtime at 70% load,
             # automatic transfer switch (ATS) available.
             "has_generator": True,
-            # SOURCED: surveyed total critical load, but UNRECONCILED against its own
-            # itemisation — see CRITICAL_LOAD_ITEMISATION_KW and critical_load_discrepancy_kw()
-            # below. The 18.0 is used here as the later-reported figure; the circuit breakdown
-            # sums to 20.0. Worth settling because critical_load_kw divides into backup_hours —
-            # a 10% error here moves every ride-through number on the dashboard.
+            # REPORTED: college confirms 18.0 kW is the correct total, settling WHICH of the two
+            # survey records to use. That is a real answer to a real question.
+            #
+            # It does NOT reconcile them. The circuit itemisation still sums to 20.0 kW, so a
+            # 2.0 kW error sits somewhere in that breakdown and nobody has found it. Deleting the
+            # itemisation to make the numbers agree would destroy the only evidence that the error
+            # exists — see critical_load_discrepancy_kw(), which stays non-zero on purpose.
             "critical_load_kw": 18.0,
         },
     },
 ]
 
 POP_SERVED = {s["id"]: s["pop_served"] for s in SHELTERS}
+
+# --- Shelter capacity, bounded from the surveyed floor area -----------------------------------
+# pop_served cannot be measured from a desk. It CAN be bounded from one, and the bound turns out
+# to be informative.
+#
+# DERIVED: Kerala State Minimum Standards of Relief (KSDMA, Edition 1, 9 July 2020) — 3.5 m2 of
+# covered area per person in a relief centre. This is the GOVERNING standard for a shelter in
+# Kodakara, which is why it is cited ahead of the Sphere Handbook (2018, Shelter and Settlement
+# Standard 3); Sphere independently specifies the same 3.5 m2, so the two agree.
+#
+# KSDMA relaxes the figure to 2.5 m2 in mountainous areas. That relaxation does NOT apply here —
+# using it would raise the ceiling to 580 and manufacture agreement with the standing 500.
+#
+# Dividing the SURVEYED gross floor area by that minimum gives the largest population the
+# building could possibly shelter to standard.
+#
+# This is deliberately an UPPER BOUND and nothing more. Gross floor area includes corridors,
+# stairwells, toilets, walls and plant rooms, none of which are sleepable, so true capacity is
+# strictly lower — by how much cannot be known without a floor plan. Quoting the bound as an
+# estimate would be the same error as quoting the guess, in the opposite direction. Refusing to
+# invent a usable-area fraction is what keeps this a bound rather than a fabricated measurement.
+#
+# The bound is worth computing because 1450 / 3.5 = 414 < 500. The standing pop_served is not
+# merely unmeasured; it is INCONSISTENT with the surveyed floor area under the cited standard,
+# and it errs toward overstating how many people each repair restores.
+SHELTER_AREA_PER_PERSON_M2 = 3.5
+
+
+def shelter_capacity_upper_bound(site_id: str) -> int | None:
+    """
+    Largest population this shelter could hold at the Sphere minimum area per person.
+
+    Upper bound, not an estimate: computed from GROSS floor area, so unusable circulation and
+    service space is still counted as sleepable. Floored to a whole person.
+
+    Returns None for a site with no surveyed floor area — including the synthetic sites the
+    recovery tests build. No area, no bound: returning a number anyway would be inventing the
+    very thing this function exists to avoid, and callers must handle the gap explicitly rather
+    than inherit a fabricated ceiling.
+    """
+    try:
+        site = get_shelter(site_id)
+    except KeyError:
+        return None
+    area = site["building"].get("floor_area_m2")
+    if not area:
+        return None
+    return int(area // SHELTER_AREA_PER_PERSON_M2)
+
+
+def pop_served_exceeds_area_bound(site_id: str, pop: int | None = None) -> bool:
+    """
+    True when the claimed population exceeds what the floor area can hold.
+
+    `pop` defaults to the standing POP_SERVED but can be overridden, so callers ranking against
+    a caller-supplied population check THAT figure rather than a global one it does not use.
+    False when no bound exists — an unknown ceiling is not a violated one.
+
+    Asserted in the test suite, so the day pop_served is replaced with a surveyed figure this
+    either goes quiet or fails loudly — it cannot rot into a stale claim the way a comment can.
+    """
+    bound = shelter_capacity_upper_bound(site_id)
+    if bound is None:
+        return False
+    return (POP_SERVED.get(site_id, 0) if pop is None else pop) > bound
+
+
+def pop_served_overstatement(site_id: str, pop: int | None = None) -> int:
+    """How many people the claimed population exceeds the area bound by (0 if within, or if
+    no bound can be computed)."""
+    bound = shelter_capacity_upper_bound(site_id)
+    if bound is None:
+        return 0
+    return max(0, (POP_SERVED.get(site_id, 0) if pop is None else pop) - bound)
 
 # --- Critical load reconciliation ------------------------------------------------------------
 # The survey recorded critical load TWICE and the two records disagree: this per-circuit
@@ -429,6 +584,19 @@ def critical_load_discrepancy_kw() -> float:
 
 def critical_load_is_reconciled() -> bool:
     return critical_load_discrepancy_kw() == 0.0
+
+
+# DERIVED: while the records disagree, the honest reading of the critical load is the interval
+# they bracket — not either endpoint on its own. Callers report backup duration across the whole
+# range so the dashboard shows the pessimistic end alongside the flattering one, rather than
+# inheriting whichever figure happened to be assigned to critical_load_kw.
+#
+# Averaging the two would manufacture a number neither survey record supports, and would hide
+# the disagreement behind false precision. The interval keeps it visible.
+def critical_load_range_kw() -> tuple[float, float]:
+    """(low, high) kW across both survey records. Equal values mean the records agree."""
+    a, b = CRITICAL_LOAD_REPORTED_KW, critical_load_itemised_total_kw()
+    return (min(a, b), max(a, b))
 
 
 def get_shelter(site_id: str) -> dict:

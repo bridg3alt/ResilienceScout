@@ -43,11 +43,22 @@ REPAIR_EFFORT_H = {
 # TODO(user): the substation node has no surveyed repair estimate, so it falls through to the
 # default below. A grid asset that big is unlikely to be an 8 h job — get a real figure before
 # any plan leans on restoring it.
+#
+# The number is kept at 8.0 rather than inflated to something "safer": guessing higher would be
+# just as invented, and would additionally bias the ranking by making grid restoration look
+# unattractive on fabricated grounds. What changes instead is that the guess is now DECLARED —
+# `effort_is_estimated()` marks it, and every plan carries the list of repairs whose effort is a
+# fallback rather than a survey figure, so a reader can see which parts of a ranking rest on it.
 _DEFAULT_EFFORT_H = 8.0
 
 
 def _effort(node: str) -> float:
     return REPAIR_EFFORT_H.get(node, _DEFAULT_EFFORT_H)
+
+
+def effort_is_estimated(node: str) -> bool:
+    """True when this asset's repair effort is the generic fallback, not a surveyed estimate."""
+    return node not in REPAIR_EFFORT_H
 
 
 def restoration_plan(graph: dict, failed: set[str]) -> dict:
@@ -113,6 +124,7 @@ def prioritize(graphs: list[dict], failed_by_site: dict[str, list[str]],
             continue   # nothing to prioritise; the shelter is still running
 
         pop = pop_served.get(site_id, 0)
+        bound = presets.shelter_capacity_upper_bound(site_id)
         effort = plan["effort_h"]
         labels = {n["id"]: n["label"] for n in graph["nodes"]}
 
@@ -125,7 +137,12 @@ def prioritize(graphs: list[dict], failed_by_site: dict[str, list[str]],
         # from an assertion into a comparison the reader can check.
         deferred_ids = sorted(failed - set(plan["repairs"]))
         deferred = [
-            {"id": d, "label": labels.get(d, d), "effort_h": _effort(d)}
+            {
+                "id": d,
+                "label": labels.get(d, d),
+                "effort_h": _effort(d),
+                "effort_estimated": effort_is_estimated(d),
+            }
             for d in deferred_ids
         ]
         full_effort = round(sum(_effort(f) for f in failed), 1)
@@ -136,12 +153,29 @@ def prioritize(graphs: list[dict], failed_by_site: dict[str, list[str]],
             "repairs": plan["repairs"],
             "repair_labels": [labels.get(r, r) for r in plan["repairs"]],
             "repair_effort_h": effort,
+            # Which repairs in THIS plan are costed from a fallback rather than a survey figure.
+            # Non-empty means the plan's effort total — and therefore its rank — rests partly on
+            # a guess, which the dashboard flags rather than presenting the ranking as settled.
+            "estimated_effort_repairs": [r for r in plan["repairs"] if effort_is_estimated(r)],
             "deferred_repairs": deferred_ids,
             "deferred": deferred,
             "full_repair_effort_h": full_effort,
             "effort_saved_h": round(full_effort - effort, 1),
             "population_restored": pop if plan["achievable"] else 0,
             "pop_per_effort_h": round(pop / effort, 2) if effort and plan["achievable"] else 0.0,
+            # The same figure recapped at the floor-area capacity ceiling (presets), which for
+            # this shelter is LOWER than the standing pop_served. Carried alongside rather than
+            # substituted: the bound is a ceiling, not a measurement, so it belongs next to the
+            # claim as a check on it. With one shelter modelled the ranking is unchanged either
+            # way — this exists so that stops being true silently once a second is added.
+            #
+            # None when the site has no surveyed floor area (synthetic sites in the tests), so an
+            # absent bound reads as "unknown" downstream instead of as an unconstrained pass.
+            "population_restored_area_bounded": (
+                (min(pop, bound) if bound is not None else None)
+                if plan["achievable"] else 0
+            ),
+            "pop_exceeds_area_bound": presets.pop_served_exceeds_area_bound(site_id, pop),
             "achievable": plan["achievable"],
             "services_restored": sorted(
                 {s for r in plan["repairs"] for s in downstream(graph, r)}

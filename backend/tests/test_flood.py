@@ -252,18 +252,37 @@ def test_deferred_repairs_are_the_failures_the_plan_deliberately_skips(mild_day)
 
 def test_unsurveyed_asset_reads_unknown_not_ok(site, building, mild_day):
     """
-    The substation has no surveyed elevation, so it must never render "ok".
+    An asset with no surveyed elevation must never render a plain "ok".
 
-    This pins the direction of the failure. Previously it fell through to "ok" and painted green
-    at every depth — the model asserting an asset was dry when it had merely never been measured.
-    An unmeasured asset is "unknown"; only a measurement can make it "ok".
+    This pins the direction of the failure. Once it fell through to "ok" and painted green at every
+    depth — the model asserting an asset was dry when it had merely never been measured.
+
+    The substation is now "ok_reported": the college states it sits above flood level, but no
+    height was measured. That is a THIRD state on purpose. It must not collapse into "ok", which
+    would let a verbal assurance read off the map as a survey result, and it is no longer "unknown"
+    because a named source did make a claim.
     """
     deep = analyze_flood(building, mild_day, 2.0)   # deeper than every surveyed elevation
     g = build_graph(site, building, deep)
     substation = next(n for n in g["nodes"] if n["id"] == "substation")
 
     assert substation["elevation_m"] is None, "substation was surveyed; this test is now stale"
-    assert substation["health"] == "unknown"
+    assert substation["health"] == "ok_reported"
+    assert substation["health"] != "ok", "a reported claim must never render as a measurement"
+
+
+def test_an_asset_with_neither_height_nor_report_still_reads_unknown(site, building, mild_day):
+    """
+    Guards the original failure mode for assets nobody has claimed anything about. The UPS has no
+    surveyed elevation and no report, so it must stay "unknown" — adding the reported tier must not
+    have quietly promoted every unmeasured asset to green.
+    """
+    deep = analyze_flood(building, mild_day, 2.0)
+    g = build_graph(site, building, deep)
+    ups = next(n for n in g["nodes"] if n["id"] == "ups")
+
+    assert ups["id"] not in presets.REPORTED_ABOVE_FLOOD
+    assert ups["health"] == "unknown"
 
     # Every asset that IS surveyed still resolves to a real assessment at this depth.
     assessed = [n for n in g["nodes"] if n["elevation_m"] is not None]
@@ -347,3 +366,168 @@ def test_recovery_does_not_credit_population_to_a_repair_that_restores_nothing(g
     assert not shelter_powered(graph, failed - {"solar_inverter"}), (
         "repairing the inverter alone must NOT power the shelter while the panel is down"
     )
+
+
+# --- Desk-derived bounds -----------------------------------------------------------------------
+# These cover the values that were CONSTRAINED without a site visit (presets.DERIVED_VALUES).
+# A derivation is not a measurement, so none of them clears DATA_IS_PLACEHOLDER — that is
+# asserted too, because quietly retiring the notice is the failure mode worth guarding.
+
+
+def test_shelter_capacity_bound_is_derived_from_surveyed_area(site):
+    """
+    Capacity ceiling = surveyed floor area / KSDMA minimum covered area per person.
+
+    Pins the arithmetic so the citation cannot drift away from the number it justifies.
+    """
+    area = site["building"]["floor_area_m2"]
+    bound = presets.shelter_capacity_upper_bound("decennial_block")
+    assert bound == int(area // presets.SHELTER_AREA_PER_PERSON_M2)
+    assert bound == 414
+
+
+def test_reported_pop_served_is_corroborated_by_the_floor_area_bound():
+    """
+    This test previously asserted the OPPOSITE — that the standing 500 exceeded the 414 ceiling.
+    That failure is what prompted asking the college, and the answer (400) now sits inside the
+    bound. The flip is the intended lifecycle, and rewriting it forces the change to be conscious.
+
+    Two independent routes now agree to within 3.5%: a verbal report from the people who run the
+    building, and surveyed floor area divided by a published standard. Corroboration, NOT
+    verification — both could still be describing normal occupancy rather than shelter capacity.
+    """
+    bound = presets.shelter_capacity_upper_bound("decennial_block")
+    pop = presets.POP_SERVED["decennial_block"]
+
+    assert pop == 400
+    assert pop <= bound, f"reported {pop} exceeds the {bound} the floor area allows"
+    assert presets.pop_served_exceeds_area_bound("decennial_block") is False
+    assert presets.pop_served_overstatement("decennial_block") == 0
+
+
+def test_capacity_bound_is_none_rather_than_invented_for_a_site_without_surveyed_area():
+    """No floor area, no ceiling. Returning a number anyway would fabricate the constraint."""
+    assert presets.shelter_capacity_upper_bound("no_such_site") is None
+    # An unknown ceiling is not a violated one.
+    assert presets.pop_served_exceeds_area_bound("no_such_site") is False
+    assert presets.pop_served_overstatement("no_such_site") == 0
+
+
+def test_pop_bound_check_honours_a_caller_supplied_population():
+    """
+    prioritize() can rank against caller-supplied populations, so the bound check must test THAT
+    figure. Guards a real bug: the first cut compared the global POP_SERVED regardless of what
+    the caller actually ranked with.
+    """
+    assert presets.pop_served_exceeds_area_bound("decennial_block", pop=100) is False
+    assert presets.pop_served_exceeds_area_bound("decennial_block", pop=1000) is True
+
+
+def test_critical_load_is_reported_as_the_interval_the_records_bracket():
+    """The disagreement is bounded, never averaged into a figure neither record supports."""
+    low, high = presets.critical_load_range_kw()
+    assert (low, high) == (18.0, 20.0)
+    assert low == presets.CRITICAL_LOAD_REPORTED_KW
+    assert high == presets.critical_load_itemised_total_kw()
+    # 19.0 would be the tempting "compromise". Nothing may produce it.
+    assert low != high, "records agree; the range machinery should be retired deliberately"
+
+
+def test_neither_derivations_nor_reports_clear_the_placeholder_notice():
+    """
+    Neither a desk derivation nor a verbal report is a measurement, so neither may retire the
+    notice. `REPAIR_EFFORT_H` is still genuinely unsurveyed, which is what keeps it up.
+
+    This is the load-bearing guard on the whole provenance design: the failure mode being
+    prevented is someone clearing the banner by moving entries between registries rather than by
+    measuring anything.
+    """
+    assert presets.DATA_IS_PLACEHOLDER is True
+    assert presets.DATA_IS_PLACEHOLDER == bool(presets.UNSURVEYED_VALUES)
+    assert "REPAIR_EFFORT_H" in presets.UNSURVEYED_VALUES
+
+    # Values the college supplied moved to REPORTED — they must be in exactly one tier, never
+    # dropped from all of them, which is how an unverified figure becomes an invisible one.
+    for key in ("pop_served", "critical_load_kw"):
+        assert key in presets.REPORTED_VALUES
+        assert key not in presets.UNSURVEYED_VALUES
+        assert key not in presets.SURVEYED_VALUES
+
+    # The registries are kept disjoint so the UI cannot present a report or a derivation as a survey.
+    assert not set(presets.DERIVED_VALUES) & set(presets.SURVEYED_VALUES)
+    assert not set(presets.REPORTED_VALUES) & set(presets.SURVEYED_VALUES)
+    assert not set(presets.REPORTED_VALUES) & set(presets.UNSURVEYED_VALUES)
+
+
+# --- Pricing the unmeasured elevations ---------------------------------------------------------
+
+
+def test_substation_is_reported_unassessed_not_ok(graph):
+    """
+    The substation has no surveyed elevation, so the model can never flood it. It must therefore
+    read "unknown" — rendering it green would be the model asserting an asset is dry when it has
+    simply never been measured.
+    """
+    from resilienceos.dependency_graph import unassessed_nodes
+    assert "substation" in unassessed_nodes(graph)
+
+
+def test_unassessed_sensitivity_runs_the_graph_both_ways(graph):
+    """
+    The honest substitute for inventing the substation elevation: report whether the outcome
+    actually depends on the gap, instead of silently assuming the asset survived.
+    """
+    from resilienceos.dependency_graph import unassessed_sensitivity
+    s = unassessed_sensitivity(graph)
+
+    assert "substation" in s["unassessed"]
+    # Both worlds are evaluated, and the pessimistic one is never more optimistic than the other.
+    assert s["powered_if_unassessed_fail"] <= s["powered_if_unassessed_survive"]
+    assert s["changes_outcome"] == (
+        s["powered_if_unassessed_survive"] != s["powered_if_unassessed_fail"]
+    )
+
+
+def test_losing_the_substation_alone_does_not_unpower_the_shelter(graph):
+    """
+    The graph earning its keep: the substation feeds only the grid path, so losing it drops the
+    grid while battery / solar / generator still carry the shelter. A per-asset checklist would
+    flag it as a failure and stop there.
+    """
+    assert shelter_powered(graph, {"substation"})
+
+
+def test_repair_effort_declares_which_figures_are_fallbacks():
+    """
+    The substation has no surveyed repair estimate. The generic 8 h default is kept (guessing
+    higher would be equally invented and would bias the ranking), but it must be DECLARED.
+    """
+    from resilienceos.recovery import effort_is_estimated
+    assert effort_is_estimated("substation") is True
+    assert effort_is_estimated("transformer") is False
+
+
+def test_a_reported_claim_is_used_but_still_challenged(site, building, mild_day):
+    """
+    The point of the REPORTED tier: the college's word is good enough to act on, and never good
+    enough to stop testing.
+
+    So the substation reads as working (the claim is used) AND still appears in the sensitivity
+    analysis (the claim is priced). Promoting it out of `unassessed` the moment someone vouched
+    for it would silently retire the only check on whether that vouching matters.
+
+    Built against an actual flood rather than the bare `graph` fixture: with no flood result every
+    node reads "unknown", so the fixture cannot distinguish the states this test exists to separate.
+    """
+    from resilienceos.dependency_graph import unassessed_nodes, unassessed_sensitivity
+
+    deep = analyze_flood(building, mild_day, 2.0)   # deeper than every surveyed elevation
+    g = build_graph(site, building, deep)
+
+    substation = next(n for n in g["nodes"] if n["id"] == "substation")
+    assert substation["health"] == "ok_reported"       # the claim is used
+    assert "substation" in unassessed_nodes(g)         # and still challenged
+
+    s = unassessed_sensitivity(g)
+    assert "substation" in s["unassessed"]
+    assert s["powered_if_unassessed_fail"] <= s["powered_if_unassessed_survive"]

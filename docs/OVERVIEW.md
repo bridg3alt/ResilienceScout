@@ -46,7 +46,7 @@ weather.py ──► building.py ──► twin.py            low-data physics-i
 | `twin.py` | Hour-by-hour 5R1C thermal simulation. |
 | `solar.py` | PV generation from GHI + temperature. |
 | `hazard.py` | Heatwave, outage, and **flood** analysis. Flood decides *which* DER survives; the existing energy-balance model (`backup_duration_h`) decides how long it lasts. |
-| `presets.py` | **The data-provenance chokepoint.** Flood line, equipment elevations, shelter inventory, population. Two tiers: SOURCED (measured/cited) vs INVENTED (`TODO(user)`), with `UNSURVEYED_VALUES` / `SURVEYED_VALUES` as the machine-readable registry the UI notice is derived from. |
+| `presets.py` | **The data-provenance chokepoint.** Flood line, equipment elevations, shelter inventory, population. Three tiers: SOURCED (measured/cited), DERIVED (bounded from a surveyed input + a cited standard), INVENTED (`TODO(user)`), with `SURVEYED_VALUES` / `DERIVED_VALUES` / `UNSURVEYED_VALUES` as the machine-readable registries the UI notice is derived from. |
 | `dependency_graph.py` | Shelter → panel → transformer/solar/battery/generator. `single_points_of_failure()` — OR across sources, AND through the panel. |
 | `recovery.py` | Exhaustive minimum-effort repair set per shelter, ranked by population restored per repair-hour. |
 | `engine.py` | `ceri_score` (flood readiness) + `resilience_score` (heat). Transparent sub-scores; **upper-clamp only** — flooring a reward term is what once made the heat score blind to real gains. |
@@ -119,7 +119,7 @@ are stored alongside the converted depth so the conversion stays auditable.
 - **Weather.** Live Open-Meteo forecast + history. Verified resolving at the corrected campus
   coordinates (Kodakara: 10.3595, 76.2859) — ~23 °C, 99% RH, monsoon-plausible for July.
 - **All the logic** — flood inundation per asset, dependency-graph SPOF detection, exhaustive
-  recovery search, CERI scoring, budget optimization. Covered by 56 passing regression tests.
+  recovery search, CERI scoring, budget optimization. Covered by 68 passing regression tests.
 - **Campus coordinates.** SOURCED and corrected: were 10.5276, 76.2144 (Thrissur *city*,
   ~19 km north — every weather call was keyed to the wrong town). Now the Kodakara campus.
 
@@ -138,17 +138,68 @@ are stored alongside the converted depth so the conversion stays auditable.
 - **Grid topology** — 11 kV substation confirmed upstream of the transformer; UPS confirmed as
   backing the IT load only (2.0 kW) and wired so it never gates shelter power.
 
+### Derived — bounded without a site visit (`presets.DERIVED_VALUES`)
+
+Neither of these is a measurement, and neither clears `DATA_IS_PLACEHOLDER`. They are what could
+honestly be done from a desk instead of guessing. See [docs/SURVEY.md](SURVEY.md) §7.1.
+
+- **Shelter capacity ≤ 414.** Surveyed floor area (1450 m²) ÷ the KSDMA minimum covered area per
+  person (3.5 m², Ed. 1, 9 Jul 2020). The standing `pop_served` of 500 exceeds this, so it is
+  *inconsistent with the surveyed area*, not merely unmeasured — and it errs toward overstating
+  how many people each repair restores. An **upper bound only**: gross area counts corridors,
+  stairwells and toilets as sleepable, so true capacity is strictly lower. Inventing a usable-area
+  fraction to sharpen it would fabricate the measurement the bound exists to avoid.
+- **Critical load = the interval 18.0–20.0 kW.** The two disagreeing survey records bracket it.
+  `/api/sites/{id}/backup` reports `hours_range` and `adequate_worst_case` across both ends.
+  Averaging to 19.0 would produce a figure neither record supports.
+
+Where a value cannot even be bounded, its **absence is priced**:
+`dependency_graph.unassessed_sensitivity()` runs the graph with the unmeasured assets dry and then
+failed, and reports whether the shelter's outcome actually turns on the gap. It does not say
+whether the substation floods — it says how much it matters that we do not know, which is what
+decides whether the measurement is worth prioritising.
+
+### Reported by the college, unverified (`presets.REPORTED_VALUES`)
+
+Stated by Sahrdaya facilities staff, recorded on the author's account of that conversation. No
+survey record, no document, no instrument reading. Kept as its own tier because treating a
+statement from the people who run the building as a guess throws away real knowledge, while
+treating it as a measurement claims a rigour nobody applied.
+
+- **`pop_served` = 400.** Supersedes the invented 500, which exceeded the floor-area ceiling.
+- **`critical_load_kw` = 18.0.** Settles *which* survey record to use. It does **not** reconcile
+  them: the itemisation still sums to 20.0, so a 2.0 kW error sits unlocated in that breakdown.
+  `critical_load_discrepancy_kw()` stays non-zero on purpose.
+- **Substation above flood level.** Modelled as a flood-exposure claim via `REPORTED_ABOVE_FLOOD`,
+  not an elevation — no height was given, and writing one would fabricate a measurement. Its node
+  renders `ok_reported`, a state distinct from both `ok` (measured dry) and `unknown`.
+
+**A reported claim is used and still challenged.** All three remain inside
+`unassessed_sensitivity()`, so vouching for an asset never retires the check on whether that
+vouching matters. One email to the Estate Officer promotes all three to SOURCED — see
+[docs/SURVEY.md](SURVEY.md) §7.2.
+
 ### Still provisional (`presets.UNSURVEYED_VALUES`)
 
-- **`pop_served`** — still the pre-survey 500. The survey measured *daily occupancy* (350–450),
-  a different quantity. Drives the recovery ranking, so leaving it invented leaves the
-  recommendations invented.
-- **`critical_load_kw`** — two survey records disagree: the circuit itemisation sums to 20.0 kW
-  against a reported total of 18.0 kW. Held as data (`critical_load_discrepancy_kw()`) rather
-  than a comment, so it cannot be forgotten.
-- **`substation_elevation`** — never measured, so the substation never floods in the model. Its
-  graph node reports `unknown` rather than `ok` so the gap stays visible on the map.
+One entry remains, which is what keeps `DATA_IS_PLACEHOLDER` true:
+
 - **`REPAIR_EFFORT_H`** (`recovery.py`) — the substation falls through to a generic 8 h default.
+  Now load-bearing only if the college's report that the substation stays dry turns out to be
+  wrong: while that holds, the substation never fails and never enters a repair plan. Every ranked
+  plan carries `estimated_effort_repairs` naming any repair costed from this fallback (currently
+  empty).
+
+The other three former entries — `pop_served`, `critical_load_kw` and `substation_elevation` —
+moved to `REPORTED_VALUES` above when the college supplied figures. They did **not** become
+measurements, and the test suite asserts all four registries stay disjoint so an entry can never be
+cleared by moving it between tiers rather than by measuring something.
+
+**None of the four gaps currently changes a recommendation.** Verified rather than assumed: the
+substation is tested both ways (`changes_outcome: false`), the 18-vs-20 kW spread moves
+ride-through 3.4 h → 3.9 h against a 12 h requirement the shelter misses either way, no plan uses
+the fallback repair estimate, and with one modelled shelter there is nothing for `pop_served` to
+rank against. That is the honest headline: the gaps are documented, bounded, and demonstrably not
+driving the output.
 
 Also still modelled rather than derived: **`FLOOD_SCENARIOS_M`**, the return-period ladder. One
 observed point does not give return periods; that needs terrain data (LiDAR/photogrammetry), which
@@ -172,7 +223,7 @@ named values with measurements. **[docs/SURVEY.md](SURVEY.md)** §7 is exactly w
 ## Verify
 
 ```bash
-python -m pytest              # 33 regression tests — flood domain + scoring
+python -m pytest              # 68 regression tests — flood domain + datum + scoring + provenance
 cd backend
 python validate_physics.py    # twin physics sanity (live weather)
 python smoke_pipeline.py      # heatwave → outage → score → plan → retrofits

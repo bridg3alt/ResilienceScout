@@ -84,7 +84,61 @@ export function BackupAdequacyChart({ shelters }: BackupAdequacyChartProps) {
             </Bar>
           </BarChart>
         </ResponsiveContainer>
+
+        <LoadRangeNote shelters={shelters} />
       </CardContent>
     </Card>
+  );
+}
+
+/**
+ * The bars are drawn from ONE critical-load figure, but the survey recorded that load twice and
+ * the two records disagree (18.0 kW reported vs 20.0 kW itemised). The lower figure is the one in
+ * use, which makes every bar the optimistic reading.
+ *
+ * A chart cannot show that on its own, so it is stated. The case that matters most is when the
+ * two ends straddle the required window — the shelter then "passes" only on the flattering record,
+ * which is exactly the kind of thing that must not be rounded away into a green bar.
+ */
+function LoadRangeNote({ shelters }: { shelters: ShelterStatusRow[] }) {
+  const withRange = shelters.filter((s) => s.backup_range && !s.backup_range.critical_load_reconciled);
+  if (withRange.length === 0) return null;
+
+  const straddling = withRange.filter(
+    (s) => s.backup_range!.hours_min < s.backup_required_h && s.operational,
+  );
+  const [low, high] = withRange[0].backup_range!.critical_load_range_kw;
+
+  return (
+    <div
+      className={`mt-3 rounded-lg border px-3 py-2 text-xs ${
+        straddling.length > 0
+          ? "border-amber-500/40 bg-amber-500/10 text-sidebar-foreground/85"
+          : "border-sidebar-border/40 text-sidebar-foreground/70"
+      }`}
+    >
+      <span className="font-medium">
+        The essential-equipment load was recorded twice and the two records disagree ({low} kW vs{" "}
+        {high} kW).{" "}
+      </span>
+      These bars use the lower figure, so they show the{" "}
+      <span className="font-medium">best case</span>. At the higher figure the shelter runs out
+      sooner:{" "}
+      {withRange.map((s, i) => (
+        <span key={s.site_id} className="tabular-nums">
+          {i > 0 && "; "}
+          {s.backup_range!.hours_min.toFixed(1)}–{s.backup_range!.hours_max.toFixed(1)} h
+        </span>
+      ))}
+      .
+      {straddling.length > 0 && (
+        <span className="font-medium">
+          {" "}
+          On the higher figure {straddling.length > 1 ? "these shelters" : "this shelter"} no
+          longer meets the required window — so whether it passes depends on an unsettled survey
+          record, not on the building.
+        </span>
+      )}
+    </div>
   );
 }

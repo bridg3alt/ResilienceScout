@@ -16,20 +16,44 @@ The differentiator is not the inspection — it's the **infrastructure dependenc
 
 Built for the 2026 NY Climate Exchange Climate Tech Fellowship (Energy × Urban Resilience).
 
-> ### Data provenance — mostly surveyed, four values still provisional
-> Site surveys of the Decennial Block (latest 2026-07-18) closed most of the model's data gaps.
-> **Measured:** the vertical datum (finished floor level tied to MSL at 11.84 m), the August 2018
-> flood mark (0.82 m above floor, evidenced by wall staining), six of eight equipment elevations,
-> the full DER nameplate, floor area, and the grid topology.
+> ### Data provenance — four tiers, and the notice cannot be faked away
+> Every campus-specific number is **measured**, **reported**, **derived**, or **still
+> provisional**, and the code says which.
 >
-> **Still provisional —** `pop_served`, `critical_load_kw`, the substation elevation, and
-> `REPAIR_EFFORT_H`. These are enumerated in code as `presets.UNSURVEYED_VALUES`, from which
-> `DATA_IS_PLACEHOLDER` is *derived* rather than hand-set. That flows to `placeholder: true` on
-> every API response and a persistent notice in the UI reading *"4 of 10 values still
-> provisional"*, which expands to name exactly which. The notice cannot be cleared by editing a
-> flag — only by replacing the named values with measurements.
+> **Measured (`SURVEYED_VALUES`)** — site surveys of the Decennial Block (latest 2026-07-18)
+> closed most of the gaps: the vertical datum (finished floor level tied to MSL at 11.84 m), the
+> August 2018 flood mark (0.82 m above floor, evidenced by wall staining), six of eight equipment
+> elevations, the full DER nameplate, floor area, and the grid topology.
 >
-> See [docs/SURVEY.md](docs/SURVEY.md) §7 for what closes each one.
+> **Reported (`REPORTED_VALUES`)** — stated by college facilities staff, not independently
+> verified: shelter capacity **400**, critical load **18.0 kW** (settling which of two disagreeing
+> survey records to use), and the 11 kV substation sitting above flood level. The substation claim
+> is modelled as a *flood-exposure claim*, not an elevation — no height was given, and inventing
+> one would fabricate a measurement. One written confirmation by email promotes all three to
+> sourced.
+>
+> **Derived (`DERIVED_VALUES`)** — bounded from a desk, from a surveyed input plus a cited public
+> standard. Shelter capacity cannot exceed 1450 m² ÷ 3.5 m² per person (KSDMA Ed. 1, 9 Jul 2020)
+> = **414**. The reported 400 sits inside that ceiling, so two independent routes — a verbal
+> report and surveyed area ÷ a published standard — agree to within 3.5%. That is corroboration,
+> not verification.
+>
+> **Still provisional (`UNSURVEYED_VALUES`)** — `REPAIR_EFFORT_H`. `DATA_IS_PLACEHOLDER` is
+> *derived* from this registry rather than hand-set, flowing to `placeholder: true` on every API
+> response and a persistent UI notice. Neither a report nor a derivation clears it: a report is
+> unverified and a bound constrains rather than measures, which is why all four registries are
+> kept disjoint and asserted so in the test suite.
+>
+> Where a measurement is missing *or merely reported*, its cost is priced rather than assumed —
+> `unassessed_sensitivity()` runs the dependency graph both ways and reports whether the gap
+> actually changes the outcome. A reported claim is used **and** still challenged: the substation
+> renders as working while remaining in the sensitivity test, so vouching for an asset never
+> retires the check on whether that vouching matters.
+>
+> Current finding: none of the four gaps changes any recommendation at the modelled depths.
+>
+> See [docs/SURVEY.md](docs/SURVEY.md) §7.1 for what was closed without a site visit, and §7.2 for
+> which remaining items can be obtained remotely.
 
 ---
 
@@ -79,7 +103,7 @@ Without a key the copilot still works — it returns the grounded evidence
 ## Verify it works
 
 ```bash
-python -m pytest              # 56 regression tests (flood domain + datum + scoring)
+python -m pytest              # 68 regression tests (flood domain + datum + scoring + provenance)
 
 cd backend
 python validate_physics.py    # twin physics sanity checks (uses real weather)

@@ -213,22 +213,38 @@ def test_registry_entries_match_the_values_that_are_actually_unsurveyed():
     value is genuinely surveyed — at which point the entry should be removed in the same edit.
     """
     unsurveyed = presets.UNSURVEYED_VALUES
+    reported = presets.REPORTED_VALUES
 
-    # pop_served is still the pre-survey figure, not a measured shelter capacity
-    assert "pop_served" in unsurveyed
-    assert presets.POP_SERVED["decennial_block"] == 500
+    # --- Reported by the college, not verified. These moved OUT of `unsurveyed` when the college
+    # supplied a figure, and must be in `reported` instead — never silently dropped from both,
+    # which is how a verbal assurance turns into an apparent measurement.
+    assert "pop_served" in reported
+    assert "pop_served" not in unsurveyed
+    assert presets.POP_SERVED["decennial_block"] == 400
 
-    # the two critical-load records still disagree
-    assert "critical_load_kw" in unsurveyed
+    # The college settled WHICH critical-load record to use, but the records still disagree: the
+    # itemisation sums to 20.0 against the confirmed 18.0. Resolving the choice is not the same as
+    # reconciling the arithmetic, and conflating them would bury a 2.0 kW error nobody has found.
+    assert "critical_load_kw" in reported
     assert not presets.critical_load_is_reconciled()
 
-    # the substation still has no measured height, so it cannot be assessed against a water line
-    assert "substation_elevation" in unsurveyed
+    # The substation's flood exposure is a REPORTED claim, not a height. It must still have no
+    # entry in EQUIPMENT_ELEVATION_M — writing a number there to represent "high ground" would
+    # fabricate the measurement this whole registry exists to protect.
+    assert "substation_flood_exposure" in reported
+    assert "substation" in presets.REPORTED_ABOVE_FLOOD
     assert "substation" not in presets.EQUIPMENT_ELEVATION_M
 
     # the substation repair estimate is still absent from recovery.py
     from resilienceos import recovery
     assert "REPAIR_EFFORT_H" in unsurveyed
+    assert "substation" not in recovery.REPAIR_EFFORT_H
+
+    # No value may sit in two tiers at once — that is how a reader ends up seeing the same figure
+    # described as both measured and unverified.
+    for a, b in ((unsurveyed, reported), (reported, presets.SURVEYED_VALUES),
+                 (unsurveyed, presets.SURVEYED_VALUES)):
+        assert not set(a) & set(b)
     assert "substation" not in recovery.REPAIR_EFFORT_H
 
 
