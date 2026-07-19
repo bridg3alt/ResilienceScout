@@ -24,7 +24,7 @@ POWER_SOURCES = ("transformer", "battery", "solar_inverter", "generator")
 # tier drives the layered layout the dashboard renders (0 = shelter, left/top).
 _TIERS = {
     "shelter": 0,
-    "distribution_panel": 1, "comms": 1,
+    "distribution_panel": 1, "comms": 1, "ups": 1,
     "transformer": 2, "battery": 2, "solar_inverter": 2, "generator": 2,
     "solar_panels": 3, "road_access": 3, "substation": 3,
 }
@@ -39,6 +39,7 @@ _LABELS = {
     "generator": "Generator",
     "road_access": "Road access",
     "comms": "Communications",
+    "ups": "UPS (IT load)",
     "substation": "Campus substation (11 kV)",
 }
 
@@ -63,6 +64,14 @@ _DEPENDENCIES = [
     ("distribution_panel", "shelter"),
     ("solar_panels", "solar_inverter"),   # panels feed the inverter, not the shelter directly
     ("road_access", "generator"),         # no road, no fuel resupply
+    # SOURCED: the UPS backs the IT load only — server rack (1.2 kW) + network (0.8 kW) — so it
+    # sits between the panel and comms rather than under the shelter. That placement is the whole
+    # point: a UPS wired to the shelter node would register as a single point of failure, which
+    # would be false, because losing it costs coordination and transfer-window ride-through, not
+    # the shelter's power. Losing the panel already takes comms down; the UPS is what carries the
+    # IT load across the seconds between mains loss and the generator's ATS picking up.
+    ("distribution_panel", "ups"),
+    ("ups", "comms"),
     ("comms", "shelter"),                 # coordination, not power — never gates power
 ]
 
@@ -112,13 +121,27 @@ def build_graph(site: dict, building, flood=None, repaired=frozenset()) -> dict:
 
 
 def node_health(asset: str, flood) -> str:
-    """"failed" | "at_risk" | "ok", derived from the flood result's inundated asset list."""
+    """
+    "failed" | "at_risk" | "ok" | "unknown", derived from the flood result's inundated asset list.
+
+    An asset with NO surveyed elevation returns "unknown", never "ok". This previously fell
+    through to "ok", which failed in the dangerous direction: the substation has no entry in
+    EQUIPMENT_ELEVATION_M, so it rendered green at every depth — the model asserting an asset
+    was dry when it had simply never been measured. "Unknown" is the honest state, and the
+    dashboard already paints it slate ("Not assessed") rather than green.
+
+    Note this makes the node visibly unassessed but does not make it fail: it still never enters
+    the failed set, so `shelter_powered` continues to treat the grid path as alive. Closing that
+    needs the measurement, not more code — see the TODO on the substation edge above.
+    """
     if asset == "shelter":
         return "failed" if not flood.operational else "ok"
     if asset in flood.failed_equipment:
         return "failed"
     elev = presets.EQUIPMENT_ELEVATION_M.get(asset)
-    if elev is not None and elev - flood.flood_depth_m <= presets.AT_RISK_MARGIN_M:
+    if elev is None:
+        return "unknown"
+    if elev - flood.flood_depth_m <= presets.AT_RISK_MARGIN_M:
         return "at_risk"
     return "ok"
 

@@ -248,6 +248,96 @@ def test_deferred_repairs_are_the_failures_the_plan_deliberately_skips(mild_day)
     assert {d["id"] for d in row["deferred"]} == set(row["deferred_repairs"])
 
 
+# --- unsurveyed assets must not read as safe -------------------------------------------------
+
+def test_unsurveyed_asset_reads_unknown_not_ok(site, building, mild_day):
+    """
+    The substation has no surveyed elevation, so it must never render "ok".
+
+    This pins the direction of the failure. Previously it fell through to "ok" and painted green
+    at every depth — the model asserting an asset was dry when it had merely never been measured.
+    An unmeasured asset is "unknown"; only a measurement can make it "ok".
+    """
+    deep = analyze_flood(building, mild_day, 2.0)   # deeper than every surveyed elevation
+    g = build_graph(site, building, deep)
+    substation = next(n for n in g["nodes"] if n["id"] == "substation")
+
+    assert substation["elevation_m"] is None, "substation was surveyed; this test is now stale"
+    assert substation["health"] == "unknown"
+
+    # Every asset that IS surveyed still resolves to a real assessment at this depth.
+    assessed = [n for n in g["nodes"] if n["elevation_m"] is not None]
+    assert assessed, "no surveyed assets in the graph"
+    assert all(n["health"] in ("ok", "at_risk", "failed") for n in assessed)
+
+
+def test_ups_backs_the_it_load_and_is_not_a_single_point_of_failure(site, building, graph):
+    """
+    The UPS backs the server rack + network (2.0 kW), not the shelter's whole critical load.
+
+    That scoping is the entire correctness question. Wired to the shelter node it would appear as
+    a single point of failure — losing it would read as losing the shelter — which is false: what
+    a UPS failure actually costs is coordination and ride-through across the transfer window.
+    Placed under comms, it drops out of the power path where it belongs.
+    """
+    ids = {n["id"] for n in graph["nodes"]}
+    assert "ups" in ids
+
+    assert "ups" not in single_points_of_failure(graph)
+    assert single_points_of_failure(graph) == ["distribution_panel"]
+
+    # it reaches comms, and comms alone — it never carries the shelter's power
+    assert downstream(graph, "ups") == ["comms", "shelter"]
+    assert shelter_powered(graph, {"ups"}), "UPS loss must not cut shelter power"
+
+    # no guessed height: it was not in the elevation survey
+    ups = next(n for n in graph["nodes"] if n["id"] == "ups")
+    assert ups["elevation_m"] is None
+
+    # the network rack is deliberately NOT a second node — it is what `comms` already represents
+    assert "network_rack" not in ids
+
+
+def test_unknown_health_does_not_leak_into_the_repair_plan(site, building, mild_day):
+    """
+    "Unknown" must stay a display state. It is not a failure, so it must not be picked up as a
+    repair job and charged the default 8 h effort.
+    """
+    deep = analyze_flood(building, mild_day, 2.0)
+    g = build_graph(site, building, deep)
+    failed = sorted(n["id"] for n in g["nodes"] if n["health"] == "failed")
+
+    assert "substation" not in failed
+    row = prioritize([g], {site["id"]: failed})["ranked"][0]
+    assert "substation" not in row["repairs"]
+    assert "substation" not in row["deferred_repairs"]
+
+
+# --- the two survey records that disagree ----------------------------------------------------
+
+def test_critical_load_itemisation_still_disagrees_with_the_reported_total():
+    """
+    Guards the 2.0 kW gap between the survey's circuit breakdown (20.0) and its reported total
+    (18.0). This test is MEANT to fail the day the survey resolves it — that failure is the
+    reminder to update critical_load_kw alongside, rather than letting a stale gap sit unnoticed.
+    """
+    assert presets.critical_load_itemised_total_kw() == 20.0
+    assert presets.CRITICAL_LOAD_REPORTED_KW == 18.0
+    assert presets.critical_load_discrepancy_kw() == 2.0
+    assert presets.critical_load_is_reconciled() is False
+
+
+def test_shelter_uses_the_reported_total_so_backup_hours_is_the_optimistic_reading(site):
+    """
+    Pins WHICH of the two disagreeing figures drives the dashboard. critical_load_kw divides into
+    backup_hours, so using the smaller (18.0) makes every ride-through number the optimistic one.
+    Worth stating in a test: if someone swaps in the itemised 20.0, ride-through drops ~10% and
+    that should be a deliberate, visible change.
+    """
+    assert site["building"]["critical_load_kw"] == presets.CRITICAL_LOAD_REPORTED_KW
+    assert presets.CRITICAL_LOAD_REPORTED_KW < presets.critical_load_itemised_total_kw()
+
+
 def test_recovery_does_not_credit_population_to_a_repair_that_restores_nothing(graph):
     """
     Guards the first cut of this module, which credited a shelter's whole population to

@@ -46,7 +46,7 @@ weather.py ──► building.py ──► twin.py            low-data physics-i
 | `twin.py` | Hour-by-hour 5R1C thermal simulation. |
 | `solar.py` | PV generation from GHI + temperature. |
 | `hazard.py` | Heatwave, outage, and **flood** analysis. Flood decides *which* DER survives; the existing energy-balance model (`backup_duration_h`) decides how long it lasts. |
-| `presets.py` | **The placeholder chokepoint.** Flood line, equipment elevations, shelter inventory, population. Two tiers: SOURCED (cited) vs INVENTED (`TODO(user)`). |
+| `presets.py` | **The data-provenance chokepoint.** Flood line, equipment elevations, shelter inventory, population. Two tiers: SOURCED (measured/cited) vs INVENTED (`TODO(user)`), with `UNSURVEYED_VALUES` / `SURVEYED_VALUES` as the machine-readable registry the UI notice is derived from. |
 | `dependency_graph.py` | Shelter → panel → transformer/solar/battery/generator. `single_points_of_failure()` — OR across sources, AND through the panel. |
 | `recovery.py` | Exhaustive minimum-effort repair set per shelter, ranked by population restored per repair-hour. |
 | `engine.py` | `ceri_score` (flood readiness) + `resilience_score` (heat). Transparent sub-scores; **upper-clamp only** — flooring a reward term is what once made the heat score blind to real gains. |
@@ -83,28 +83,34 @@ designed to accept live telemetry from drone or sensor hardware. That hardware d
 that live depth instead of the fixed phase-based guess (`_effective_depth` in `api.py`), and the
 UI polls every few seconds so it updates on its own with zero clicks.
 
-Every response carries `placeholder: true` while `DATA_IS_PLACEHOLDER` is set.
+Every response carries `placeholder: true` while `DATA_IS_PLACEHOLDER` is set. `/api/sites` and
+`/health` additionally carry `unsurveyed` (and `/api/sites` carries `surveyed`) — the named
+provenance registry the dashboard notice renders from.
 
 ---
 
 ## The real-vs-invented ledger
 
-The method is demonstrable; the numbers are not. This is the honest split.
+The method is demonstrable, and after the 2026-07 surveys most of the numbers are too. This is the
+honest split, kept current with `presets.py`.
 
-**Current state after the site survey.** Equipment elevations, DER nameplate and critical load
-are measured. The **2018 flood line is now observed** (0.78 m above finished floor at the
-Decennial Block electrical room entrance), so `FLOOD_LINE_M` is sourced rather than guessed, and
-the ground-to-floor step (0.18 m) makes above-grade readings convertible.
+**Current state.** Both sides of the model are anchored to measurements. Equipment elevations
+(six of eight), the DER nameplate, floor area and the grid topology are surveyed. The **vertical
+datum is now closed**: finished floor level is tied to MSL (11.84 m) and to external grade
+(0.18 m step). The **2018 flood line is observed** — 0.82 m above finished floor at the Decennial
+Block **main entrance lobby**, evidenced by wall staining — so `FLOOD_LINE_M` is sourced rather
+than guessed. Survey uncertainty (0.03 m) is recorded, so `AT_RISK_MARGIN_M` is derived at 2σ
+rather than chosen.
 
-Still invented: the **design scenario ladder** (`FLOOD_SCENARIOS_M` — one observed point does not
-give return periods), `pop_served`, the survey uncertainty, and three elevations. So
-`DATA_IS_PLACEHOLDER` stays `True`.
+Four values remain provisional; they are enumerated in code as `presets.UNSURVEYED_VALUES` and
+listed under *Still provisional* below.
 
-Because the two sides are now mixed, the vertical **datum** is enforced rather than assumed:
-every elevation is metres above finished floor level, and any external figure must be converted
-through `presets.depth_above_floor()`, which raises instead of guessing when the finished floor
-level is unsurveyed. `POST /api/observations` requires an explicit `datum` and returns 400 for a
-reading it cannot honestly convert. See `docs/SURVEY.md` §3 for what closes this.
+The vertical **datum** is enforced rather than assumed: every elevation is metres above finished
+floor level, and any external figure must be converted through `presets.depth_above_floor()`,
+which raises rather than guessing if a required survey constant is missing. `POST
+/api/observations` requires an explicit `datum` and rejects any reading it cannot honestly
+convert. Now that the MSL tie exists, above-MSL readings convert — the raw reading and its datum
+are stored alongside the converted depth so the conversion stays auditable.
 
 ### Real
 
@@ -113,29 +119,53 @@ reading it cannot honestly convert. See `docs/SURVEY.md` §3 for what closes thi
 - **Weather.** Live Open-Meteo forecast + history. Verified resolving at the corrected campus
   coordinates (Kodakara: 10.3595, 76.2859) — ~23 °C, 99% RH, monsoon-plausible for July.
 - **All the logic** — flood inundation per asset, dependency-graph SPOF detection, exhaustive
-  recovery search, CERI scoring, budget optimization. Covered by 33 passing regression tests.
+  recovery search, CERI scoring, budget optimization. Covered by 56 passing regression tests.
 - **Campus coordinates.** SOURCED and corrected: were 10.5276, 76.2144 (Thrissur *city*,
   ~19 km north — every weather call was keyed to the wrong town). Now the Kodakara campus.
 
-### Invented (`TODO(user)`, quarantined in `presets.py` + `recovery.py`)
+### Surveyed (2026-07-18, `presets.SURVEYED_VALUES`)
 
-- `FLOOD_LINE_M`, `FLOOD_SCENARIOS_M` — **unsourceable from a desk.** KSDMA publishes flood
-  hazard *probability* zones, not depths in metres. Needs the 2018 high-water survey.
-- `EQUIPMENT_ELEVATION_M` — must be measured on site. Standards give *minimums*, not actuals;
-  assuming code-minimum biases toward falsely reporting a shelter safe.
-- `SHELTERS` inventory + `pop_served` — deliberately round numbers so they read as fake.
-  `pop_served` drives the recovery ranking, so inventing it invents the recommendations.
-- `REPAIR_EFFORT_H` (`recovery.py`) — affects ranking order only; a maintenance-team interview
-  settles it.
-- `REQUIRED_BACKUP_H = 12.0` — **no standard to copy.** The Kerala State Minimum Standards of
-  Relief (KSDMA, Ed. 1, 9 Jul 2020) requires only that power "shall be ensured" and lighting
-  "made available", with no duration. So 12 h is *our* design choice, not a regulatory
-  threshold — never claim a shelter "meets the standard" on backup hours.
+- **Vertical datum** — `FINISHED_FLOOR_LEVEL_MSL_M = 11.84`, `GROUND_TO_FLOOR_STEP_M = 0.18`.
+  One open caveat: this figure and the wall mark satisfy `12.66 − 11.84 = 0.82` exactly against
+  regional marker CKD05 8 km away. Confirm it was measured, not back-computed — `docs/SURVEY.md`
+  §3.1.
+- **`FLOOD_LINE_M = 0.82`** — observed August 2018 mark, wall staining, main entrance lobby.
+- **`EQUIPMENT_ELEVATION_M`** — six of eight measured on site (actuals, not code minimums, which
+  matters: assuming code-minimum biases toward falsely reporting a shelter safe). `solar_panels`
+  and `road_access` are still estimated.
+- **DER nameplate** — 18.0 kWp solar, 40 kWh LiFePO4, 62.5 kVA diesel with ATS.
+- **`SURVEY_UNCERTAINTY_M = 0.03`** → `AT_RISK_MARGIN_M` derived at 2σ.
+- **Grid topology** — 11 kV substation confirmed upstream of the transformer; UPS confirmed as
+  backing the IT load only (2.0 kW) and wired so it never gates shelter power.
 
-**How the honesty is enforced in code:** `DATA_IS_PLACEHOLDER = True` flows to `placeholder:
-true` on every API response and a persistent "DEMO DATA — NOT SURVEYED" banner in the UI. Flip
-it to `False` only once every `TODO(user)` (and `REPAIR_EFFORT_H`) is replaced with a surveyed
-value. **[docs/SURVEY.md](SURVEY.md)** is exactly what to collect to get there.
+### Still provisional (`presets.UNSURVEYED_VALUES`)
+
+- **`pop_served`** — still the pre-survey 500. The survey measured *daily occupancy* (350–450),
+  a different quantity. Drives the recovery ranking, so leaving it invented leaves the
+  recommendations invented.
+- **`critical_load_kw`** — two survey records disagree: the circuit itemisation sums to 20.0 kW
+  against a reported total of 18.0 kW. Held as data (`critical_load_discrepancy_kw()`) rather
+  than a comment, so it cannot be forgotten.
+- **`substation_elevation`** — never measured, so the substation never floods in the model. Its
+  graph node reports `unknown` rather than `ok` so the gap stays visible on the map.
+- **`REPAIR_EFFORT_H`** (`recovery.py`) — the substation falls through to a generic 8 h default.
+
+Also still modelled rather than derived: **`FLOOD_SCENARIOS_M`**, the return-period ladder. One
+observed point does not give return periods; that needs terrain data (LiDAR/photogrammetry), which
+is the explicit ask of this application. Note the `extreme` band was removed in the 2026-07 update
+— confirm that was deliberate, as it cuts the modelled envelope optimistically.
+
+And **`REQUIRED_BACKUP_H = 12.0`** — **no standard to copy.** The Kerala State Minimum Standards
+of Relief (KSDMA, Ed. 1, 9 Jul 2020) requires only that power "shall be ensured" and lighting
+"made available", with no duration. NDMA is no more specific. So 12 h is *our* design choice, not
+a regulatory threshold — never claim a shelter "meets the standard" on backup hours.
+
+**How the honesty is enforced in code:** `DATA_IS_PLACEHOLDER` is *derived* — it is
+`bool(UNSURVEYED_VALUES)`, not a hand-set flag — and flows to `placeholder: true` on every API
+response. The dashboard renders a persistent, non-dismissible notice reading *"N of M values still
+provisional"*, which expands to name what was measured and what was not, straight from the same
+registry. It cannot be cleared by editing a boolean: the only way to clear it is to replace the
+named values with measurements. **[docs/SURVEY.md](SURVEY.md)** §7 is exactly what that takes.
 
 ---
 

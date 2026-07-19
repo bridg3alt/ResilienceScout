@@ -28,17 +28,33 @@ def test_already_in_model_datum_passes_through():
     assert presets.depth_above_floor(1.2, presets.ELEVATION_DATUM) == 1.2
 
 
-def test_msl_reading_is_refused_while_floor_level_is_unsurveyed():
+def test_msl_reading_converts_now_that_the_floor_level_is_surveyed():
     """
-    Documents the CURRENT unsurveyed state: an above-MSL figure cannot be converted because the
-    finished floor level has never been levelled against a benchmark.
+    The finished floor level is now tied to MSL (11.84 m), so above-MSL figures convert.
 
-    When that survey lands, this test SHOULD fail and be rewritten to assert the conversion —
-    that is intentional. It forces the change to be conscious rather than incidental.
+    This test previously asserted the refusal. That flip is the intended lifecycle: the refusal
+    held only while the measurement was missing, and rewriting it forces the change to be
+    conscious rather than incidental.
     """
-    assert presets.FINISHED_FLOOR_LEVEL_MSL_M is None, "survey landed; update this test"
-    with pytest.raises(presets.DatumError, match="FINISHED_FLOOR_LEVEL_MSL_M"):
-        presets.depth_above_floor(3.84, "above_msl_m")
+    ffl = presets.FINISHED_FLOOR_LEVEL_MSL_M
+    assert ffl is not None
+    assert presets.depth_above_floor(12.66, "above_msl_m") == pytest.approx(12.66 - ffl)
+
+
+def test_regional_marker_converts_to_the_observed_wall_mark():
+    """
+    Pins the identity the survey rests on: the nearest regional reference (ILDM/SoI marker CKD05,
+    2018 flood at 12.66 m MSL) converts to 0.82 m above this building's floor — the same figure
+    as the wall mark in OBSERVED_EVENTS.
+
+    Asserted so the coincidence is VISIBLE rather than buried. Exact agreement between a mark here
+    and a riverbank 8 km away is either a strong cross-check or a sign the floor level was derived
+    from the marker; see the note on FINISHED_FLOOR_LEVEL_MSL_M. Either way the arithmetic should
+    not silently drift.
+    """
+    converted = presets.depth_above_floor(12.66, "above_msl_m")
+    assert converted == pytest.approx(presets.OBSERVED_EVENTS["kerala_2018"]["depth_m"], abs=1e-9)
+    assert converted == pytest.approx(presets.FLOOD_LINE_M, abs=1e-9)
 
 
 def test_above_ground_reading_converts_now_that_the_step_height_is_surveyed():
@@ -69,12 +85,11 @@ def test_conversion_never_silently_returns_the_input():
     """
     The failure mode being guarded: returning the raw number when conversion is impossible.
 
-    `above_external_ground_m` is no longer in this list because its survey constant now exists —
-    it converts rather than raising. `above_msl_m` still has no finished-floor-to-MSL tie.
+    Both survey constants now exist, so both real datums convert. What must still never happen is
+    an UNKNOWN datum quietly passing its input through — that is the silent-corruption case.
     """
-    for datum in ("above_msl_m", "nonsense"):
-        with pytest.raises(presets.DatumError):
-            presets.depth_above_floor(9.99, datum)
+    with pytest.raises(presets.DatumError):
+        presets.depth_above_floor(9.99, "nonsense")
 
 
 # --- sanity ceiling on authored constants ----------------------------------------------------
@@ -140,16 +155,24 @@ def test_observation_in_model_datum_is_accepted_and_stored_converted():
     assert stored["raw_datum"] == presets.ELEVATION_DATUM
 
 
-def test_observation_in_unconvertible_datum_is_rejected_not_stored():
-    """The deliverable: the bug becomes visible instead of silently entering the model."""
+def test_msl_observation_is_accepted_and_stored_converted():
+    """
+    An above-MSL reading now converts at the API boundary and is stored in the model's datum,
+    with the raw reading kept alongside so the conversion stays auditable.
+    """
     r = client.post("/api/observations", json={
         "site_id": "decennial_block",
-        "flood_depth_m": 3.84,
+        "flood_depth_m": 12.66,
         "datum": "above_msl_m",
         "source": "test",
     })
-    assert r.status_code == 400
-    assert "FINISHED_FLOOR_LEVEL_MSL_M" in r.json()["detail"]
+    assert r.status_code == 200
+    stored = r.json()["stored"]
+    assert stored["flood_depth_m"] == pytest.approx(12.66 - presets.FINISHED_FLOOR_LEVEL_MSL_M)
+    assert stored["datum"] == presets.ELEVATION_DATUM
+    # provenance: the untouched input survives the conversion
+    assert stored["raw_reading_m"] == 12.66
+    assert stored["raw_datum"] == "above_msl_m"
 
 
 def test_observation_without_a_datum_is_rejected():
@@ -162,11 +185,54 @@ def test_observation_without_a_datum_is_rejected():
     assert r.status_code == 422
 
 
-def test_at_risk_margin_falls_back_until_uncertainty_is_surveyed():
-    assert presets.SURVEY_UNCERTAINTY_M is None, "survey landed; margin should now be derived"
-    assert presets.AT_RISK_MARGIN_M == presets._FALLBACK_AT_RISK_MARGIN_M
+def test_at_risk_margin_is_now_derived_from_survey_uncertainty():
+    """
+    The margin is no longer the arbitrary 0.3 fallback — it is 2 sigma on the surveyed vertical
+    uncertainty, so the amber "water is close" band is now tied to what the survey can actually
+    resolve rather than to a chosen round number.
+    """
+    assert presets.SURVEY_UNCERTAINTY_M is not None
+    assert presets.AT_RISK_MARGIN_M == pytest.approx(2 * presets.SURVEY_UNCERTAINTY_M)
+    assert presets.AT_RISK_MARGIN_M < presets._FALLBACK_AT_RISK_MARGIN_M
 
 
-def test_data_is_still_flagged_placeholder():
-    """The hazard side is unsurveyed, so this must not have been flipped."""
-    assert presets.DATA_IS_PLACEHOLDER is True
+def test_placeholder_flag_is_derived_from_the_registry_not_hand_set():
+    """
+    The flag must not be settable independently of the data. It is `bool(UNSURVEYED_VALUES)`, so
+    the only way to clear the dashboard notice is to actually empty the registry — which means
+    replacing each named value with a measurement.
+    """
+    assert presets.DATA_IS_PLACEHOLDER == bool(presets.UNSURVEYED_VALUES)
+    assert presets.DATA_IS_PLACEHOLDER is True, "registry empty; every value is now surveyed?"
+
+
+def test_registry_entries_match_the_values_that_are_actually_unsurveyed():
+    """
+    Anchors each registry key to the condition that put it there, so an entry cannot be quietly
+    deleted while the underlying value is still invented. Each assertion below fails the day that
+    value is genuinely surveyed — at which point the entry should be removed in the same edit.
+    """
+    unsurveyed = presets.UNSURVEYED_VALUES
+
+    # pop_served is still the pre-survey figure, not a measured shelter capacity
+    assert "pop_served" in unsurveyed
+    assert presets.POP_SERVED["decennial_block"] == 500
+
+    # the two critical-load records still disagree
+    assert "critical_load_kw" in unsurveyed
+    assert not presets.critical_load_is_reconciled()
+
+    # the substation still has no measured height, so it cannot be assessed against a water line
+    assert "substation_elevation" in unsurveyed
+    assert "substation" not in presets.EQUIPMENT_ELEVATION_M
+
+    # the substation repair estimate is still absent from recovery.py
+    from resilienceos import recovery
+    assert "REPAIR_EFFORT_H" in unsurveyed
+    assert "substation" not in recovery.REPAIR_EFFORT_H
+
+
+def test_surveyed_and_unsurveyed_registries_do_not_overlap():
+    """A value cannot be both measured and provisional; the banner would contradict itself."""
+    assert not (set(presets.SURVEYED_VALUES) & set(presets.UNSURVEYED_VALUES))
+    assert presets.SURVEYED_VALUES, "nothing recorded as surveyed — the banner would read wrong"

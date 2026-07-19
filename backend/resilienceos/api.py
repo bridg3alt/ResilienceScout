@@ -81,7 +81,13 @@ def _run(inp: AnalyzeIn):
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "version": app.version, "placeholder_data": presets.DATA_IS_PLACEHOLDER}
+    return {
+        "status": "ok",
+        "version": app.version,
+        "placeholder_data": presets.DATA_IS_PLACEHOLDER,
+        "unsurveyed": presets.UNSURVEYED_VALUES,
+        "surveyed_count": len(presets.SURVEYED_VALUES),
+    }
 
 
 @app.get("/options")
@@ -227,6 +233,11 @@ def api_sites():
         "phases": list(PHASE_DEPTH_M),
         "flood_scenarios_m": presets.FLOOD_SCENARIOS_M,
         "placeholder": presets.DATA_IS_PLACEHOLDER,
+        # Named provenance, so the dashboard notice can say WHICH figures are still provisional
+        # instead of implying the whole model is unmeasured. Both are surfaced: leading with what
+        # was surveyed is the accurate framing now that most of it has been.
+        "unsurveyed": presets.UNSURVEYED_VALUES,
+        "surveyed": presets.SURVEYED_VALUES,
     }
 
 

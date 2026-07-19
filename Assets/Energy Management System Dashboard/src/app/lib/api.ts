@@ -29,6 +29,13 @@ export interface SitesResponse {
   phases: Phase[];
   flood_scenarios_m: Record<string, number>;
   placeholder: boolean;
+  /**
+   * Named provenance from backend/resilienceos/presets.py. `unsurveyed` maps each still-invented
+   * value to why it matters; `surveyed` maps each measured one to what was recorded. `placeholder`
+   * is derived from `unsurveyed` being non-empty, so the three can never disagree.
+   */
+  unsurveyed?: Record<string, string>;
+  surveyed?: Record<string, string>;
 }
 
 export interface CeriComponents {

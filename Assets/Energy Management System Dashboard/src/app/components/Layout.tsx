@@ -89,7 +89,11 @@ export function Layout() {
             </p>
           </div>
 
-          <DemoDataBanner placeholder={sites.data?.placeholder} />
+          <DemoDataBanner
+            placeholder={sites.data?.placeholder}
+            unsurveyed={sites.data?.unsurveyed}
+            surveyed={sites.data?.surveyed}
+          />
 
           <PhaseSelector phase={phase} onPhaseChange={setPhase} floodDepthM={floodDepth} />
 

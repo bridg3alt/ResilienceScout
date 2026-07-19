@@ -1,42 +1,66 @@
 """
-ResilienceScout — the placeholder chokepoint.
+ResilienceScout — the data-provenance chokepoint.
 
-Almost every number here is INVENTED and has never been surveyed. It exists so the app can run
-end-to-end for a demo, and it is quarantined here so that replacing it with real data is a
-one-file job rather than an archaeology expedition.
+Every campus-specific number the model depends on lives here, so that replacing an assumption
+with a measurement is a one-file job rather than an archaeology expedition.
 
 Two epistemic tiers, and the comments say which is which:
-  * SOURCED  — a real, cited value. Carries its citation, and no TODO.
-  * INVENTED — a guess. Carries a TODO(user). This is still the large majority of the file.
+  * SOURCED  — a real, measured or cited value. Carries its provenance, and no TODO.
+  * INVENTED — a guess. Carries a TODO(user).
 
-One placeholder lives outside this file: REPAIR_EFFORT_H in recovery.py.
+After the site surveys of the Decennial Block (latest 2026-07-18) the SOURCED tier is now the
+large majority: the vertical datum, the 2018 flood mark, six of eight equipment elevations and
+the full DER nameplate are measured. What remains invented is enumerated in UNSURVEYED_VALUES
+below — that registry, not a hand-set boolean, is what drives the dashboard notice.
 
-`DATA_IS_PLACEHOLDER` is surfaced through the API as `placeholder: true` on every response, and
-the dashboard renders a persistent "DEMO DATA — NOT SURVEYED" banner while it is True. Flip it
-to False ONLY once every TODO below (and REPAIR_EFFORT_H) has been replaced with a surveyed
-value. See docs/SURVEY.md for how to collect them.
+One invented value lives outside this file: REPAIR_EFFORT_H in recovery.py.
 
-WHAT MUST BE SURVEYED TO MAKE THIS REAL — no amount of desk research substitutes for these.
-A site survey of the Decennial Block has now closed several of these; status per item:
-
-  1. OPEN — Campus flood-line elevation and historical flood depths. KSDMA publishes only
-     probability zones, not depths, so this still needs the 2018 high-water survey. This is now
-     the single biggest thing standing between the model and being real: every asset elevation
-     below is measured, but what the water actually does is still a guess.
-  2. MOSTLY DONE — Mounting height of each piece of electrical equipment, measured from finished
-     floor. Six of eight are now surveyed actuals. Still estimated: road_access and solar_panels.
-  3. PARTLY DONE — the substation -> transformer dependency is now confirmed and modelled.
-     Population served is still OPEN (the survey measured daily occupancy, which is not the same
-     question — see the TODO on pop_served).
-  4. DONE — Actual DER nameplate: solar kWp, battery kWh/chemistry, generator fuel + runtime.
-
-So the ASSET side of the model is now largely real; the HAZARD side is not. That asymmetry is
-exactly why DATA_IS_PLACEHOLDER stays True.
+See docs/SURVEY.md for how the remaining figures get collected.
 """
 from __future__ import annotations
 
-# Flip to False only when every TODO in this file has been replaced with surveyed data.
-DATA_IS_PLACEHOLDER = True
+# --- Provenance registry ----------------------------------------------------------------------
+# What is still NOT measured, and why each one matters. This is the single source of truth for
+# the dashboard notice: `DATA_IS_PLACEHOLDER` is derived from it rather than set by hand, so the
+# banner cannot drift out of step with the data the way a manual flag does.
+#
+# Remove an entry ONLY when the value it names has been replaced with a surveyed figure. When the
+# last entry goes, DATA_IS_PLACEHOLDER becomes False on its own and the notice disappears.
+UNSURVEYED_VALUES: dict[str, str] = {
+    "pop_served": (
+        "Shelter capacity is still the pre-survey 500. The survey measured DAILY OCCUPANCY "
+        "(350–450), which is a different quantity — occupancy counts who is normally in the "
+        "building, capacity counts who could shelter there. Drives the whole recovery ranking."
+    ),
+    "REPAIR_EFFORT_H": (
+        "The substation has no surveyed repair estimate, so recovery.py falls through to a "
+        "generic 8 h default — unlikely to be right for an 11 kV asset."
+    ),
+    "substation_elevation": (
+        "Never measured, so it has no entry in EQUIPMENT_ELEVATION_M and therefore never floods "
+        "in the model. Its graph node reads 'unknown' rather than 'ok' so the gap stays visible."
+    ),
+    "critical_load_kw": (
+        "The survey recorded critical load twice and the records disagree: the circuit "
+        "itemisation sums to 20.0 kW against a reported total of 18.0 kW. Divides into "
+        "backup_hours, so a 10% error moves every ride-through figure on the dashboard."
+    ),
+}
+
+# What IS measured. Kept alongside so the dashboard can lead with it: a notice that names only
+# the gaps reads as though nothing has been done, which stopped being true after the 2026-07
+# survey. Descriptive only — nothing in the model reads this.
+SURVEYED_VALUES: dict[str, str] = {
+    "vertical_datum": "Finished floor level tied to MSL (11.84 m) and to external grade (0.18 m step)",
+    "flood_line": "August 2018 high-water mark, 0.82 m above finished floor, evidenced by wall staining",
+    "equipment_elevations": "Six of eight measured on site; road_access and solar_panels still estimated",
+    "der_nameplate": "Solar kWp, battery kWh + chemistry, generator rating/fuel/runtime, critical load",
+    "survey_uncertainty": "Combined vertical uncertainty 0.03 m, driving the at-risk margin",
+    "grid_topology": "Campus 11 kV substation confirmed as the feed, upstream of the 250 kVA transformer",
+}
+
+# Derived, never hand-set. True while any value above remains unmeasured.
+DATA_IS_PLACEHOLDER = bool(UNSURVEYED_VALUES)
 
 # --- Vertical datum ---------------------------------------------------------------------------
 # READ THIS BEFORE ADDING ANY DEPTH OR ELEVATION.
@@ -57,12 +81,25 @@ DATA_IS_PLACEHOLDER = True
 # of returning a number.
 ELEVATION_DATUM = "above_finished_floor_m"
 
-# TODO(user): SURVEY REQUIRED (item 1) — the finished floor level of the Decennial Block tied to
-# a fixed external benchmark (MSL, or a named survey mark), from one levelling run with a dumpy
-# level or total station. This single number is the CONVERTER: without it, no externally quoted
-# flood figure — historical, modelled or satellite — can be brought into this model's datum.
-# It is therefore the highest-value unmeasured number in the whole project.
-FINISHED_FLOOR_LEVEL_MSL_M: float | None = None
+# SOURCED: finished floor level of the Decennial Block, 11.84 m above MSL, reported by the field
+# survey team (2026-07-18). This is the CONVERTER: it is what allows any externally quoted flood
+# figure — historical, modelled or satellite — to be brought into this model's datum.
+#
+# READ THIS BEFORE CITING IT AS VALIDATED. The survey also reports the 2018 wall mark at 0.82 m
+# above finished floor, and notes that the nearest regional reference (ILDM/SoI Flood Level Marker
+# CKD05, Chalakudy taluk office, ~8 km SE) recorded the 2018 flood at 12.66 m MSL. Those three
+# numbers satisfy 12.66 - 11.84 = 0.82 EXACTLY.
+#
+# Exact agreement to the centimetre between a wall mark here and a riverbank marker 8 km away,
+# across different terrain and drainage, is not what independent measurements do. Either:
+#   (a) 11.84 was measured at the building (GNSS/CORS or levelling), and the agreement is a
+#       genuine and remarkable cross-check worth writing up; or
+#   (b) 11.84 was computed as 12.66 - 0.82, in which case the identity is a DEFINITION, not a
+#       check, and must not be cited as confirming either the wall mark or the campus flood level.
+# The survey team has stated the values are measured, so this is recorded as SOURCED. But the
+# arithmetic identity is documented here because it is invisible once the numbers are separated,
+# and it is the first thing a reviewer will notice. Do not present (b) as (a).
+FINISHED_FLOOR_LEVEL_MSL_M: float | None = 11.84
 
 # SOURCED: surveyed step height from external ground to finished floor at the Decennial Block.
 # This is what converts "water was this deep outside" observations — the most common kind of
@@ -86,6 +123,10 @@ def depth_above_floor(value_m: float, datum: str) -> float:
     Raises DatumError rather than guessing when the required survey constant is missing. That is
     the point: a loud failure beats a plausible wrong number, because a wrong datum is invisible
     in the output.
+
+    Results are rounded to 4 dp (0.1 mm — far finer than any survey resolves). Without it the
+    subtractions leak binary float noise into the API and onto the dashboard: 12.66 - 11.84 reads
+    as 0.8200000000000003, which looks like false precision on a number measured with a tape.
     """
     if datum == ELEVATION_DATUM:
         return value_m
@@ -95,14 +136,14 @@ def depth_above_floor(value_m: float, datum: str) -> float:
                 "cannot convert an above-ground depth: GROUND_TO_FLOOR_STEP_M is unsurveyed. "
                 "Measure the step from external ground to finished floor first."
             )
-        return value_m - GROUND_TO_FLOOR_STEP_M
+        return round(value_m - GROUND_TO_FLOOR_STEP_M, 4)
     if datum == "above_msl_m":
         if FINISHED_FLOOR_LEVEL_MSL_M is None:
             raise DatumError(
                 "cannot convert an above-MSL depth: FINISHED_FLOOR_LEVEL_MSL_M is unsurveyed. "
                 "One levelling run against a fixed benchmark closes this."
             )
-        return value_m - FINISHED_FLOOR_LEVEL_MSL_M
+        return round(value_m - FINISHED_FLOOR_LEVEL_MSL_M, 4)
     raise DatumError(
         f"unknown datum {datum!r}; expected one of "
         f"{[ELEVATION_DATUM, 'above_external_ground_m', 'above_msl_m']}"
@@ -110,60 +151,76 @@ def depth_above_floor(value_m: float, datum: str) -> float:
 
 
 # --- Flood hazard --------------------------------------------------------------------------
-# SOURCED: derived from the observed August 2018 high-water mark at the Decennial Block
-# electrical room entrance (see OBSERVED_EVENTS below) — 0.78 m above finished floor.
+# SOURCED: the observed August 2018 high-water mark at the Decennial Block main entrance lobby
+# (see OBSERVED_EVENTS below) — 0.82 m above finished floor, evidenced by wall staining.
 #
-# This was previously an invented 0.9, which mattered more than it looked: CERI's
-# flood_readiness scores the worst power-source margin against this line (engine.py), so a
-# guessed value was setting the headline score of a building whose asset heights are measured.
-# It is now an observed event rather than a chosen number.
+# This was previously an invented 0.9, then 0.78 from an earlier reading at the electrical room
+# entrance. It matters more than it looks: CERI's flood_readiness scores the worst power-source
+# margin against this line (engine.py), so this number sets the headline score of the building.
 #
-# The battery at 0.45 m still sits 0.33 m BELOW this line — that finding is now real rather than
-# an artefact of the placeholder.
-FLOOD_LINE_M = 0.78
+# The battery at 0.45 m sits 0.37 m BELOW this line — a real finding, not an artefact.
+FLOOD_LINE_M = 0.82
 
-# TODO(user): SURVEY REQUIRED (item 2) — observed high-water marks, measured above FFL.
-# The August 2018 Kerala flood is the event staff remember and can physically point at: wall
-# staining, debris lines, photographs. Measuring those marks converts the "severe" scenario below
-# from an invention into an OBSERVED event with no modelling required, which is why this is the
-# cheapest high-value item on the survey list.
+# Observed high-water marks, measured above FFL. The August 2018 Kerala flood is the event staff
+# remember and can physically point at, which is why an observed mark beats any modelled depth.
 # Record the raw reading with the datum it was taken in, and convert via depth_above_floor().
 OBSERVED_EVENTS: dict[str, dict] = {
     "kerala_2018": {
         "building": "Decennial Block",
-        "room": "Electrical Room Entrance",
-        "depth_m": 0.78,
+        "room": "Main Entrance Lobby",
+        "depth_m": 0.82,
         "datum": ELEVATION_DATUM,   # already above finished floor — no conversion needed
-        # TODO(user): record WHAT physically evidences this mark — wall staining, debris line,
-        # photograph, or a named staff account. FLOOD_LINE_M is derived from this reading, so it
-        # is the number the whole flood-readiness sub-score rests on; "observed" without a stated
-        # form of evidence is the first thing a reviewer will ask about.
-        "evidence": None,
+        "evidence": "wall staining",
+        "observation_date": "2026-07-18",
+        "observer": "Field Survey Team",
+        "notes": (
+            "Continuous mud line visible along north entrance wall. Highest clear flood mark "
+            "measured 0.82 m above finished floor."
+        ),
+        # TODO(user): state WHY this mark survived eight years. The ILDM/SoI Flood Level Marking
+        # report (Govt of Kerala, March 2026, §2.1.2) records that mud lines persist "even for
+        # weeks if not cleaned up" and seed lines only "hours or days"; only stain lines absorbed
+        # into porous material (concrete, wood) are described as durable. A mark read in 2026 from
+        # a 2018 event is therefore plausible ONLY as an absorbed stain line, not a surface mud
+        # line. The note above says "mud line". Reconcile the two, or a reviewer will read the
+        # discrepancy as the mark being something other than 2018.
+        #
+        # SUPERSEDED: an earlier reading of 0.78 m at the Electrical Room Entrance. If that mark
+        # still exists it is worth keeping as a SECOND observation — two marks in one building
+        # cross-check each other within a single datum, which is stronger evidence than any
+        # comparison against a regional marker 8 km away.
     },
 }
 
 # Design flood scenarios, metres above finished floor.
 #
-# `severe` (1.10) and `extreme` (1.40) now sit ABOVE the observed 2018 mark of 0.78, so they
-# describe events worse than the one on record rather than merely re-stating it. `minor` and
-# `moderate` remain modelled steps below it.
+# `severe` (1.20) sits ABOVE the observed 2018 mark of 0.82, so it describes an event worse than
+# the one on record rather than merely re-stating it. `minor` and `moderate` are modelled steps
+# below it.
+#
+# TODO(user): the `extreme` band (previously 1.40) was REMOVED in the 2026-07 survey update, so
+# the worst case the model now considers is 1.20 m. Confirm that removal is deliberate. It cuts
+# the modelled envelope in the optimistic direction, and the caution below argues the opposite
+# way — that the old 1.40 may itself have been an underestimate. A shelter that "passes" now has
+# only been tested to 1.20 m.
 #
 # TODO(user): STILL PARTLY INVENTED — the 2018 observation anchors one point on this curve, but
 # nothing here is return-period derived. "How deep is a 1-in-50 year event?" needs a terrain
 # model plus local Karuvannur/drainage behaviour (docs/SURVEY.md §3.3), which is the drone
 # photogrammetry ask. KSDMA publishes flood hazard PROBABILITY zones, not depths, so there is no
-# public source that settles this.
+# public source that settles this. The ILDM/SoI report (March 2026) §5.2(vii-viii) confirms this
+# route: with the state CORS network and geoid model in place, flood risk zonation now needs
+# LiDAR drone terrain data, which is the same ask.
 #
 # EXTERNAL CAUTION (not a source of truth, do NOT copy these into the scenarios below):
 # A satellite study of the August 2018 Kerala flood found the Kole lands of Thrissur rose by up
 # to ~10 m, with a ~3.84 m regional mean inundation. Those are regional/terrain figures in a
-# different datum, an order of magnitude above anything here — which is a standing reminder that
-# `extreme` may still be an underestimate for the campus. Do not treat them as scenario inputs.
+# different datum, an order of magnitude above anything here — a standing reminder that the top
+# of this range may still be an underestimate for the campus.
 FLOOD_SCENARIOS_M = {
     "minor": 0.30,
     "moderate": 0.60,
-    "severe": 1.10,
-    "extreme": 1.40,
+    "severe": 1.20,
 }
 
 # --- Equipment elevations ------------------------------------------------------------------
@@ -199,7 +256,9 @@ EQUIPMENT_ELEVATION_M = {
     # The result is NEGATIVE (-0.08 m): the road sits below the building's finished floor, which
     # is both physically ordinary and operationally important — the access road floods before
     # anything inside the building does, cutting generator fuel resupply first.
-    "road_access": depth_above_floor(0.10, "above_external_ground_m"),
+    # Rounded at the point of definition: the raw subtraction yields -0.07999999999999999, which
+    # serialises into the API and onto the dashboard as float noise.
+    "road_access": round(depth_above_floor(0.10, "above_external_ground_m"), 3),
 }
 
 # Margin below which an asset is "at risk" rather than "ok" — i.e. the water is close.
@@ -209,10 +268,18 @@ EQUIPMENT_ELEVATION_M = {
 # that the difference is inside the survey's own error bars. Picking a round 0.3 m instead is
 # just a second guess layered on the first.
 #
-# TODO(user): SURVEY REQUIRED (item 4) — the combined vertical uncertainty of the levelling run:
-# instrument error plus how much finished floor level actually varies across the building. This
-# falls out of the item-1 levelling run for free, so it costs nothing extra to collect.
-SURVEY_UNCERTAINTY_M: float | None = None
+# SOURCED: 0.03 m, reported by the field survey team (2026-07-18).
+#
+# TODO(user): confirm this is the COMBINED figure, not the instrument spec. It must include how
+# much finished floor level actually varies across the building, not just levelling precision. A
+# 1450 m2 three-storey slab commonly varies by more than 3 cm on its own, so 0.03 looks like an
+# instrument number that has not had floor variation folded in.
+#
+# This is not cosmetic. AT_RISK_MARGIN_M below is 2x this value, so 0.03 shrinks the amber
+# "water is close" band from 0.30 m to 0.06 m — a factor of five. Assets that previously warned
+# before drowning now go straight from "ok" to "failed", and the error is in the falsely-safe
+# direction. If the combined figure is larger, this number should be larger.
+SURVEY_UNCERTAINTY_M: float | None = 0.03
 
 # Pre-survey placeholder. NOT derived from anything — retained only so the model runs and so the
 # dashboard's amber "at risk" bands do not move until a real uncertainty exists.
@@ -233,18 +300,24 @@ EQUIPMENT_EFFECT = {
     "generator": {"has_generator": False},
 }
 
-# TODO(user): NOT MODELLED YET — the survey found two assets the graph has no node for:
-#   * UPS          — bridges the gap between mains loss and generator start.
-#   * NETWORK RACK — already measured at 2.00 m (it is what "comms" elevation now refers to),
-#                    but it is not a separate node.
-# They are deliberately left out rather than guessed at, because wiring them in requires a
-# DECISION, not a measurement: what Building capability does each one's failure actually remove?
-# The existing EQUIPMENT_EFFECT vocabulary only knows how to zero out solar_kwp, battery_kwh and
-# has_generator — none of which is what a UPS or a network rack does. A UPS failure does not
-# reduce stored energy so much as remove ride-through during the transfer window, and a network
-# rack failure removes coordination, not power (which is why comms deliberately never gates power
-# in the dependency graph). Modelling either one honestly means first deciding what capability it
-# carries and possibly extending the effect vocabulary. Do not guess this one.
+# RESOLVED (2026-07): the survey found two assets the graph had no node for. Wiring them in
+# required a DECISION rather than a measurement, and both decisions have now been taken.
+#
+#   * UPS — MODELLED. Confirmed scope: it backs the IT load only (server rack 1.2 kW + network
+#     0.8 kW = 2.0 kW of the critical load), NOT the 6.0 kW classroom circuit. It therefore sits
+#     between the distribution panel and comms, and never gates shelter power — see
+#     dependency_graph.py. This scoping is what keeps it honest: wiring the UPS to the shelter
+#     node would have made it a single point of failure, which would be false. It carries no
+#     EQUIPMENT_EFFECT entry because a UPS failure removes ride-through during the transfer
+#     window, not stored energy, and the effect vocabulary below cannot express that. Modelling
+#     it structurally without inventing an energy effect is deliberate.
+#
+#   * NETWORK RACK — NOT a separate node, on purpose. It is already what the `comms` node's
+#     2.00 m elevation refers to. Adding a second node would duplicate the same physical asset
+#     and double-count its failure.
+#
+# The UPS has no surveyed elevation, so node_health() reports it "unknown" rather than "ok".
+# That is correct and must stay: do not give it a guessed height to make the map look complete.
 
 # --- Operational targets -------------------------------------------------------------------
 # TODO(user): pick and defend this number locally — there is no standard to copy it from.
@@ -297,22 +370,65 @@ SHELTERS = [
             # SOURCED: surveyed — 62.5 kVA diesel, 220 L tank, ~14 h runtime at 70% load,
             # automatic transfer switch (ATS) available.
             "has_generator": True,
-            # SOURCED: surveyed total critical load.
-            #
-            # TODO(user): UNRECONCILED against its own itemisation. The circuit breakdown
-            # recorded earlier in the survey was:
-            #   emergency lights 2.0 + network 0.8 + server rack 1.2 + classrooms 6.0
-            #   + lift 5.0 + fans 2.5 + misc 2.5  =  20.0 kW
-            # but the total subsequently reported is 18.0 kW. The 18.0 is used here as the later
-            # figure; which line item changed (or whether one was dropped) is unresolved. Worth
-            # settling because critical_load_kw divides into backup_hours — a 10% error here
-            # moves every ride-through number on the dashboard.
+            # SOURCED: surveyed total critical load, but UNRECONCILED against its own
+            # itemisation — see CRITICAL_LOAD_ITEMISATION_KW and critical_load_discrepancy_kw()
+            # below. The 18.0 is used here as the later-reported figure; the circuit breakdown
+            # sums to 20.0. Worth settling because critical_load_kw divides into backup_hours —
+            # a 10% error here moves every ride-through number on the dashboard.
             "critical_load_kw": 18.0,
         },
     },
 ]
 
 POP_SERVED = {s["id"]: s["pop_served"] for s in SHELTERS}
+
+# --- Critical load reconciliation ------------------------------------------------------------
+# The survey recorded critical load TWICE and the two records disagree: this per-circuit
+# breakdown sums to 20.0 kW, while the total reported later in the same survey is 18.0 kW.
+#
+# Held as data rather than as a comment so the disagreement is CHECKABLE. A note in a docstring
+# decays silently the moment someone edits critical_load_kw; a function that recomputes the gap
+# cannot. `critical_load_discrepancy_kw()` is asserted in the test suite, so the day the survey
+# resolves this, the test fails and points at the remaining edit rather than letting a stale
+# 2.0 kW gap sit in the file unnoticed.
+#
+# TODO(user): resolve which record is right. Not resolvable from here — it needs the survey team
+# to say which line item changed or was dropped between the two readings. Do NOT "fix" this by
+# scaling the itemisation to match 18.0: that would manufacture agreement rather than find it,
+# and the whole value of holding both numbers is that they still disagree.
+CRITICAL_LOAD_ITEMISATION_KW = {
+    "emergency_lights": 2.0,
+    "network": 0.8,
+    "server_rack": 1.2,
+    "classrooms": 6.0,
+    "lift": 5.0,
+    "fans": 2.5,
+    "misc": 2.5,
+}
+
+# The later-reported total, used as critical_load_kw on the shelter above.
+CRITICAL_LOAD_REPORTED_KW = 18.0
+
+
+def critical_load_itemised_total_kw() -> float:
+    return round(sum(CRITICAL_LOAD_ITEMISATION_KW.values()), 3)
+
+
+def critical_load_discrepancy_kw() -> float:
+    """
+    Signed gap between the itemisation and the reported total (itemised - reported).
+
+    Non-zero means the two survey records still disagree. Currently +2.0 kW: the circuits add up
+    to more load than the reported total, so the dashboard's backup_hours is computed against the
+    SMALLER figure and is therefore the OPTIMISTIC of the two readings — ride-through would be
+    ~10% shorter if the itemisation turns out to be the correct one. That direction is why this
+    is worth surfacing rather than quietly averaging.
+    """
+    return round(critical_load_itemised_total_kw() - CRITICAL_LOAD_REPORTED_KW, 3)
+
+
+def critical_load_is_reconciled() -> bool:
+    return critical_load_discrepancy_kw() == 0.0
 
 
 def get_shelter(site_id: str) -> dict:

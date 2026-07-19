@@ -16,12 +16,20 @@ The differentiator is not the inspection — it's the **infrastructure dependenc
 
 Built for the 2026 NY Climate Exchange Climate Tech Fellowship (Energy × Urban Resilience).
 
-> ### ⚠️ Demo data — not surveyed
-> The **method is demonstrable; the numbers are not.** Every equipment elevation, shelter spec,
-> and population figure in [`presets.py`](backend/resilienceos/presets.py) is **invented** and
-> TODO-marked. Every ranking is real logic over placeholder inputs. `DATA_IS_PLACEHOLDER = True`
-> flows to `placeholder: true` on every API response and an unmissable amber banner in the UI.
-> See [docs/SURVEY.md](docs/SURVEY.md) for exactly what must be measured to make it real.
+> ### Data provenance — mostly surveyed, four values still provisional
+> Site surveys of the Decennial Block (latest 2026-07-18) closed most of the model's data gaps.
+> **Measured:** the vertical datum (finished floor level tied to MSL at 11.84 m), the August 2018
+> flood mark (0.82 m above floor, evidenced by wall staining), six of eight equipment elevations,
+> the full DER nameplate, floor area, and the grid topology.
+>
+> **Still provisional —** `pop_served`, `critical_load_kw`, the substation elevation, and
+> `REPAIR_EFFORT_H`. These are enumerated in code as `presets.UNSURVEYED_VALUES`, from which
+> `DATA_IS_PLACEHOLDER` is *derived* rather than hand-set. That flows to `placeholder: true` on
+> every API response and a persistent notice in the UI reading *"4 of 10 values still
+> provisional"*, which expands to name exactly which. The notice cannot be cleared by editing a
+> flag — only by replacing the named values with measurements.
+>
+> See [docs/SURVEY.md](docs/SURVEY.md) §7 for what closes each one.
 
 ---
 
@@ -71,7 +79,7 @@ Without a key the copilot still works — it returns the grounded evidence
 ## Verify it works
 
 ```bash
-python -m pytest              # 33 regression tests (flood domain + scoring)
+python -m pytest              # 56 regression tests (flood domain + datum + scoring)
 
 cd backend
 python validate_physics.py    # twin physics sanity checks (uses real weather)
@@ -85,7 +93,7 @@ python smoke_copilot.py       # RAG retrieval + grounded answer
 backend/resilienceos/
   weather.py     building.py    twin.py        # low-data digital twin
   hazard.py      solar.py                      # heatwave + outage + flood + PV
-  presets.py                                   # ALL placeholder data, quarantined here
+  presets.py                                   # all campus data + provenance registry
   dependency_graph.py           recovery.py    # SPOF detection, repair prioritisation
   engine.py      scenarios.py                  # CERI scoring, retrofits
   copilot/       report.py      api.py         # RAG copilot, report, JSON API
@@ -95,8 +103,8 @@ docs/OVERVIEW.md                               # what's real, what's invented, w
 
 ## Docs
 
-- [docs/OVERVIEW.md](docs/OVERVIEW.md) — architecture, and an honest real-vs-invented ledger.
-- [docs/SURVEY.md](docs/SURVEY.md) — the campus survey needed to replace the placeholder data.
+- [docs/OVERVIEW.md](docs/OVERVIEW.md) — architecture, and the surveyed-vs-provisional ledger.
+- [docs/SURVEY.md](docs/SURVEY.md) — what has been surveyed, and §7 what remains.
 
 ## Roadmap (post-MVP)
 
