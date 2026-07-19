@@ -252,3 +252,44 @@ def test_surveyed_and_unsurveyed_registries_do_not_overlap():
     """A value cannot be both measured and provisional; the banner would contradict itself."""
     assert not (set(presets.SURVEYED_VALUES) & set(presets.UNSURVEYED_VALUES))
     assert presets.SURVEYED_VALUES, "nothing recorded as surveyed — the banner would read wrong"
+
+
+# --- The depth control's reference marks -----------------------------------------------------
+# The dashboard's flood-depth slider renders the observed flood line, the uncertainty band and
+# every asset elevation. Those are SURVEYED values, so they are served rather than written into
+# the frontend: a measurement copied into a React component is a measurement that can drift from
+# presets.py with nothing failing. These tests pin the serving contract, not the numbers.
+
+def test_sites_serves_the_surveyed_hazard_reference():
+    """The slider's marks must come from presets, so there is one place each height is written."""
+    ref = client.get("/api/sites").json()["hazard_reference"]
+
+    assert ref["flood_line_m"] == presets.FLOOD_LINE_M
+    assert ref["survey_uncertainty_m"] == presets.SURVEY_UNCERTAINTY_M
+    assert ref["at_risk_margin_m"] == presets.AT_RISK_MARGIN_M
+    assert ref["equipment_elevation_m"] == presets.EQUIPMENT_ELEVATION_M
+
+
+def test_hazard_reference_carries_no_elevation_for_the_unmeasured_substation():
+    """
+    The served payload must not acquire a height the registry refuses to state.
+
+    Serving elevations to the frontend is a new way for an invented number to reach a reader, so
+    the substation's absence is asserted on the wire as well as in presets.
+    """
+    ref = client.get("/api/sites").json()["hazard_reference"]
+    assert "substation" not in ref["equipment_elevation_m"]
+
+
+def test_at_risk_margin_stays_wider_than_the_generator_cliff():
+    """
+    The generator sits 0.03 m above the observed 2018 flood mark, and the survey's 2-sigma band
+    is 0.06 m. So the model CANNOT honestly say whether the generator flooded in 2018 — the
+    margin is inside the error bars, which is why node_health reports `at_risk` there.
+
+    This pins that relationship. If a future survey tightens the uncertainty below the margin,
+    this test fails and the dashboard's "inside the survey's own uncertainty" wording must be
+    re-earned rather than left standing as a claim the data no longer supports.
+    """
+    cliff = presets.EQUIPMENT_ELEVATION_M["generator"] - presets.FLOOD_LINE_M
+    assert 0 < cliff <= presets.AT_RISK_MARGIN_M

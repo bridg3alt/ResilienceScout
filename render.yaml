@@ -1,0 +1,36 @@
+# Render blueprint for the ResilienceScout API.
+#
+# Deploy: push this repo to GitHub, then Render -> New -> Blueprint -> pick the repo.
+#
+# Two things worth knowing before a demo:
+#
+# 1. FREE-TIER SLEEP. A free instance stops after ~15 minutes idle and takes ~50 seconds to wake.
+#    A reviewer clicking a link and waiting 50 seconds on a blank dashboard has already left.
+#    Either upgrade this to a paid instance, or point an external pinger (cron-job.org) at
+#    /health every 10 minutes to keep it awake. See docs/DEPLOY.md.
+#
+# 2. ALLOWED_ORIGINS is deliberately NOT set here. It has to carry the real dashboard URL, which
+#    does not exist until the frontend is deployed, and guessing it would silently produce a CORS
+#    failure that looks like a broken backend. Set it in the Render dashboard once the frontend
+#    has a domain.
+services:
+  - type: web
+    name: resiliencescout-api
+    runtime: python
+    plan: free
+    # Slimmed dependency set: chromadb is dropped so the image builds and wakes fast.
+    # The copilot falls back to TF-IDF retrieval. See requirements-deploy.txt.
+    # `../` because rootDir is backend/ while the requirements file sits at the repo root,
+    # alongside the requirements.txt it mirrors.
+    buildCommand: pip install -r ../requirements-deploy.txt
+    startCommand: uvicorn resilienceos.api:app --host 0.0.0.0 --port $PORT
+    # The FastAPI app lives in backend/; `resilienceos` is a package inside it.
+    rootDir: backend
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.13.0"
+      # Optional. Without it the copilot returns grounded evidence instead of prose, which is a
+      # degraded answer rather than an error -- so a missing key never breaks the demo.
+      - key: GROQ_API_KEY
+        sync: false

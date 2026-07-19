@@ -48,9 +48,9 @@ export function RecoveryPrioritization({ recovery }: RecoveryPrioritizationProps
             still carried by what survived.
           </p>
           <p className="text-xs">
-            To see the ranking with real failures, switch to a deeper water level — or send a
-            higher reading through <span className="font-mono">POST /api/observations</span> (see{" "}
-            <span className="font-mono">scripts/simulate_drone.py</span>), and this page will
+            To see the ranking with real failures, drag the flood depth above the generator — or
+            send a higher reading through <span className="font-mono">POST /api/observations</span>{" "}
+            (see <span className="font-mono">scripts/simulate_drone.py</span>), and this page will
             update on its own.
           </p>
         </CardContent>
