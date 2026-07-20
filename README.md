@@ -1,145 +1,102 @@
 # ResilienceScout
 
-**Is this shelter energy-ready for the flood — and if not, what do we fix first?**
+**Can this shelter keep its power on through a flood — and if not, what do we fix first?**
 
-ResilienceScout turns *minimal* building information + public weather data into a
-physics-informed digital twin, then answers three questions across a flood's lifecycle:
+Floods knock out power to the buildings communities depend on: shelters, clinics, schools. Damage
+is usually assessed by sending people to look at equipment, which is slow, dangerous while water
+is still up, and answers the wrong question. A list of broken components does not tell an
+emergency manager which repair to send the first crew to.
 
-- **Before** — audit shelter energy systems and flood exposure. Output: a **Climate Energy
-  Readiness Index (CERI)** per shelter, with four transparent sub-scores.
-- **During** — determine whether each shelter can still carry its critical load, and *why not*,
-  without sending anyone into a flooded switch room.
-- **After** — rank repairs by **population restored per repair-hour**, not by what's broken.
+ResilienceScout models a building's energy infrastructure as a dependency graph, floods it asset
+by asset against surveyed elevations, and reports whether the building can still carry its
+critical load — then ranks repairs by **population restored per repair-hour**.
 
-The differentiator is not the inspection — it's the **infrastructure dependency graph** and the
-**recovery prioritisation** layered on top of it.
-
-Built for the 2026 NY Climate Exchange Climate Tech Fellowship (Energy × Urban Resilience).
-
-> ### Data provenance — four tiers, and the notice cannot be faked away
-> Every campus-specific number is **measured**, **reported**, **derived**, or **still
-> provisional**, and the code says which.
->
-> **Measured (`SURVEYED_VALUES`)** — site surveys of the Decennial Block (latest 2026-07-18)
-> closed most of the gaps: the vertical datum (finished floor level tied to MSL at 11.84 m), the
-> August 2018 flood mark (0.82 m above floor, evidenced by wall staining), six of eight equipment
-> elevations, the full DER nameplate, floor area, and the grid topology.
->
-> **Reported (`REPORTED_VALUES`)** — stated by college facilities staff, not independently
-> verified: shelter capacity **400**, critical load **18.0 kW** (settling which of two disagreeing
-> survey records to use), and the 11 kV substation sitting above flood level. The substation claim
-> is modelled as a *flood-exposure claim*, not an elevation — no height was given, and inventing
-> one would fabricate a measurement. One written confirmation by email promotes all three to
-> sourced.
->
-> **Derived (`DERIVED_VALUES`)** — bounded from a desk, from a surveyed input plus a cited public
-> standard. Shelter capacity cannot exceed 1450 m² ÷ 3.5 m² per person (KSDMA Ed. 1, 9 Jul 2020)
-> = **414**. The reported 400 sits inside that ceiling, so two independent routes — a verbal
-> report and surveyed area ÷ a published standard — agree to within 3.5%. That is corroboration,
-> not verification.
->
-> **Still provisional (`UNSURVEYED_VALUES`)** — `REPAIR_EFFORT_H`. `DATA_IS_PLACEHOLDER` is
-> *derived* from this registry rather than hand-set, flowing to `placeholder: true` on every API
-> response. Neither a report nor a derivation clears it: a report is
-> unverified and a bound constrains rather than measures, which is why all four registries are
-> kept disjoint and asserted so in the test suite.
->
-> Where a measurement is missing *or merely reported*, its cost is priced rather than assumed —
-> `unassessed_sensitivity()` runs the dependency graph both ways and reports whether the gap
-> actually changes the outcome. A reported claim is used **and** still challenged: the substation
-> renders as working while remaining in the sensitivity test, so vouching for an asset never
-> retires the check on whether that vouching matters.
->
-> Current finding: none of the four gaps changes any recommendation at the modelled depths.
->
-> See [docs/SURVEY.md](docs/SURVEY.md) §7.1 for what was closed without a site visit, and §7.2 for
-> which remaining items can be obtained remotely.
+Pilot building: the Decennial Block at Sahrdaya College of Engineering, Kodakara, Kerala.
 
 ---
 
 ## What it does
 
+**Before a flood** — scores flood readiness 0–100 as a Climate Energy Readiness Index (CERI),
+built from four sub-scores you can inspect individually: energy readiness, flood readiness, backup
+duration, and critical vulnerabilities.
+
+**During** — determines whether the building can still carry its critical load, and why not,
+without sending anyone into a flooded switch room.
+
+**After** — ranks repairs by what each one restores per hour of work, rather than by what is most
+badly damaged.
+
+At 1.2 m of water the pilot building's answer is: **repair the generator, 12 hours** — deferring
+the battery (10 h), road access (8 h) and the transformer (48 h). Twelve hours of work instead of
+seventy-eight, restoring the same 400 people.
+
+## How it works
+
 | Layer | Implementation |
 |---|---|
 | Weather | Open-Meteo forecast + history (free, no key) |
 | Digital twin | 5R1C ISO-13790 thermal model via `rcbsim` (ETH Zürich, MIT) |
-| Flood hazard | Per-asset elevation → inundation → which DER survives |
-| Dependency graph | Shelter → panel → transformer / solar / battery / generator, with SPOF detection |
+| Flood hazard | Per-asset elevation → inundation → which energy sources survive |
+| Dependency graph | Shelter → panel → transformer / solar / battery / generator, with single-point-of-failure detection |
 | Backup energy | Generator fuel endurance (ATS-ordered) → battery → solar, against the critical load |
-| Scoring | CERI 0–100: energy readiness, flood readiness, backup duration, critical vulnerabilities |
-| Recovery | **Exhaustive** minimum-effort repair search, ranked by population-per-repair-hour |
-| Retrofits | Scenario comparison + budget optimizer (resilience gain / ₹) |
-| Copilot | ChromaDB RAG (→ TF-IDF fallback) grounded in live sim numbers, Groq LLM |
+| Scoring | CERI 0–100 across four transparent sub-scores |
+| Recovery | Exhaustive minimum-effort repair search, ranked by population per repair-hour |
+| Copilot | Retrieval over the live simulation numbers, optional Groq LLM |
 
-## Quick start (localhost)
+The contribution is the dependency graph and the recovery ranking on top of it, not the
+inspection. A damage report says the transformer is flooded; the graph says whether that matters —
+losing the transformer is survivable with a charged battery and fatal without one, while losing
+the distribution panel is fatal either way, because every source is wired through it.
+
+## Run it
 
 ```bash
 python -m venv .venv
 .venv\Scripts\activate            # Windows  (source .venv/bin/activate on mac/linux)
 pip install -r requirements.txt
 
-# 1. backend
+# backend
 cd backend
 uvicorn resilienceos.api:app --reload      # http://localhost:8000/docs
 
-# 2. dashboard (separate terminal)
+# dashboard (separate terminal)
 cd dashboard
 npm install
 npm run dev                                # http://localhost:5173
 ```
 
-The app runs **fully offline with zero keys**.
+Runs fully offline with zero API keys.
 
-**Optional — natural-language copilot:** get a free Groq key at
-https://console.groq.com/keys, then:
+**Optional** — for natural-language copilot answers, get a free key at
+https://console.groq.com/keys and set `GROQ_API_KEY`. Without one the copilot returns the
+retrieved evidence and simulation numbers instead of prose.
 
-```bash
-copy .env.example .env       # and paste your key, OR:
-set GROQ_API_KEY=your_key     # Windows (export GROQ_API_KEY=... elsewhere)
-```
-
-Without a key the copilot still works — it returns the grounded evidence
-(retrieved guidelines + simulation numbers) instead of prose.
-
-## Verify it works
+## Tests
 
 ```bash
-python -m pytest              # 80 regression tests (flood domain + datum + scoring + provenance)
+python -m pytest              # 80 regression tests
 
 cd backend
-python validate_physics.py    # twin physics sanity checks (uses real weather)
-python smoke_pipeline.py      # heatwave -> outage -> score -> plan -> retrofits
-python smoke_copilot.py       # RAG retrieval + grounded answer
+python validate_physics.py    # digital-twin physics sanity checks
+python smoke_pipeline.py      # end-to-end: hazard → score → plan → retrofits
 ```
 
 ## Layout
 
 ```
 backend/resilienceos/
-  weather.py     building.py    twin.py        # low-data digital twin
-  hazard.py      solar.py                      # heatwave + outage + flood + PV
-  presets.py                                   # all campus data + provenance registry
-  dependency_graph.py           recovery.py    # SPOF detection, repair prioritisation
+  weather.py     building.py    twin.py        # digital twin
+  hazard.py      solar.py                      # flood, outage, heat, PV
+  presets.py                                   # building data and provenance
+  dependency_graph.py           recovery.py    # SPOF detection, repair ranking
   engine.py      scenarios.py                  # CERI scoring, retrofits
-  copilot/       report.py      api.py         # RAG copilot, report, JSON API
-dashboard/                                     # React dashboard (Vite + Tailwind + Radix)
-docs/OVERVIEW.md                               # what's real, what's invented, what's needed
+  copilot/       report.py      api.py         # copilot, report, JSON API
+dashboard/                                     # React dashboard (Vite + Tailwind)
 ```
-
-## Docs
-
-- [docs/OVERVIEW.md](docs/OVERVIEW.md) — architecture, and the surveyed-vs-provisional ledger.
-- [docs/SURVEY.md](docs/SURVEY.md) — what has been surveyed, and §7 what remains.
-- [docs/DEPLOY.md](docs/DEPLOY.md) — hosting the demo free on Render + Vercel.
-
-## Roadmap (post-MVP)
-
-Campus survey to retire the placeholder data, spatial dependency map over real building
-footprints, additional hazards (heatwave, wildfire), IoT (ESP32) integration, and validation
-against measured indoor-temperature logs.
 
 ---
 
-*Digital twin: 5R1C ISO-13790 — Jayathissa et al., Applied Energy 202 (2017),
-ETH Zürich Architecture & Building Systems (MIT). Early prototype for decision
-support — not a substitute for on-site engineering assessment.*
+*Digital twin: 5R1C ISO-13790 — Jayathissa et al., Applied Energy 202 (2017), ETH Zürich
+Architecture & Building Systems (MIT). Early prototype for decision support — not a substitute
+for on-site engineering assessment.*

@@ -27,7 +27,7 @@ below — that registry, not a hand-set boolean, is what drives the dashboard no
 
 One invented value lives outside this file: REPAIR_EFFORT_H in recovery.py.
 
-See docs/SURVEY.md for how the remaining figures get collected.
+See the site survey record for how the remaining figures get collected.
 """
 from __future__ import annotations
 
@@ -64,7 +64,7 @@ UNSURVEYED_VALUES: dict[str, str] = {
 #
 # TODO(user): ask the Estate / Facilities Officer to confirm each of these BY EMAIL. A one-line
 # written reply converts all three from REPORTED to SOURCED at zero cost and no site visit, and is
-# the single highest-value follow-up left on the project — see docs/SURVEY.md §7.2.
+# the single highest-value follow-up left on the project — see the site survey record §7.2.
 REPORTED_VALUES: dict[str, str] = {
     "pop_served": (
         "Shelter capacity of 400 reported by college staff. Supersedes the invented pre-survey "
@@ -282,7 +282,7 @@ OBSERVED_EVENTS: dict[str, dict] = {
 #
 # TODO(user): STILL PARTLY INVENTED — the 2018 observation anchors one point on this curve, but
 # nothing here is return-period derived. "How deep is a 1-in-50 year event?" needs a terrain
-# model plus local Karuvannur/drainage behaviour (docs/SURVEY.md §3.3), which is the drone
+# model plus local Karuvannur/drainage behaviour (site survey record §3.3), which is the drone
 # photogrammetry ask. KSDMA publishes flood hazard PROBABILITY zones, not depths, so there is no
 # public source that settles this. The ILDM/SoI report (March 2026) §5.2(vii-viii) confirms this
 # route: with the state CORS network and geoid model in place, flood risk zonation now needs
@@ -303,7 +303,7 @@ FLOOD_SCENARIOS_M = {
 # Height of each asset above finished floor [m]. Anything at or below the flood depth is
 # assumed inundated and offline.
 #
-# SOURCED — measured on site at the Decennial Block (see docs/SURVEY.md). These are actuals, not
+# SOURCED — measured on site at the Decennial Block (see the site survey record). These are actuals, not
 # code minimums, which matters: assuming code-minimum biases the model toward falsely reporting
 # the shelter safe. Two entries are still NOT surveyed and keep their TODO(user).
 #
