@@ -190,14 +190,6 @@ docs/                    evaluation plan, deployment guide, figures
 
 ---
 
-## Author
-
-**Brigit Thomas** — designed and built the reasoning core, energy and hazard models, CERI, the API
-and dashboard, and conducted the on-site survey behind the 3 cm finding.
-
-Contributions and critique are welcome, particularly from facilities and electrical engineers
-willing to challenge the recovery orderings.
-
 ---
 
 ## Acknowledgements
