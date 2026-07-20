@@ -208,5 +208,4 @@ MIT — see [LICENSE](LICENSE).
 
 ---
 
-> **Research prototype for climate resilience decision support.** Not a substitute for professional
-> engineering assessment during emergency response.
+
