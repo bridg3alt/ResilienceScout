@@ -11,11 +11,8 @@ import { ErrorState, LoadingState } from "./States";
 import { useApi } from "../hooks/useApi";
 import { api, type Phase } from "../lib/api";
 
-// Live-telemetry pages poll every 3s so they update on their own as flood readings arrive.
 const LIVE_POLL_MS = 3000;
 
-// Page headings used to render here. Removed: the sidebar already names the current page, so the
-// heading restated it, and each panel below carries its own title.
 
 /**
  * `depthM` is the depth-control override, or undefined when no override is active. It is a
@@ -52,7 +49,6 @@ export function Layout() {
   const [currentPage, setCurrentPage] = useState("overview");
   const [phase, setPhase] = useState<Phase>("preparedness");
   const [siteId, setSiteId] = useState<string | null>(null);
-  // null = no override; the backend then prefers a live observation, else the phase design flood.
   const [depthOverride, setDepthOverride] = useState<number | null>(null);
   const [landed, setLanded] = useState(false);
 
@@ -66,13 +62,6 @@ export function Layout() {
       : sites.data.flood_scenarios_m.severe
     : undefined;
 
-  // Open at the OBSERVED 2018 high-water mark rather than at a phase default.
-  //
-  // That is a surveyed measurement (0.82 m, wall staining, main entrance lobby) and it sits 3 cm
-  // below the generator's alternator, so the first thing on screen is this building's actual
-  // margin: "3 cm more water and the generator goes under -- and that is inside the survey's own
-  // uncertainty". Landing on a round design-flood figure instead would open on a number nobody
-  // measured, and bury the one finding that makes the case.
   useEffect(() => {
     if (landed || reference?.flood_line_m === undefined) return;
     setDepthOverride(reference.flood_line_m);
@@ -81,8 +70,6 @@ export function Layout() {
 
   const effectiveDepth = depthOverride ?? phaseDepth;
 
-  // Switching phase hands control back to that phase's design flood -- otherwise the tabs would
-  // silently stop changing anything once the slider had been touched.
   const handlePhaseChange = (p: Phase) => {
     setPhase(p);
     setDepthOverride(null);

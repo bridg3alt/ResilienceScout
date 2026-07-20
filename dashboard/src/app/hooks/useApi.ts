@@ -29,7 +29,6 @@ export function useApi<T>(fetcher: () => Promise<T>, deps: unknown[], pollMs?: n
 
   const reload = useCallback(() => setNonce((n) => n + 1), []);
 
-  // Initial + deps/reload-driven fetch: shows loading and surfaces errors.
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -54,7 +53,6 @@ export function useApi<T>(fetcher: () => Promise<T>, deps: unknown[], pollMs?: n
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [...deps, nonce]);
 
-  // Silent background polling: refresh data in place, never flip loading, ignore transient errors.
   useEffect(() => {
     if (!pollMs) return;
     let cancelled = false;
@@ -64,7 +62,6 @@ export function useApi<T>(fetcher: () => Promise<T>, deps: unknown[], pollMs?: n
           if (!cancelled) setData(d);
         })
         .catch(() => {
-          /* transient poll failure: keep the last good data, don't blank the screen */
         });
     }, pollMs);
     return () => {

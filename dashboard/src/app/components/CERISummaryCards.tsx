@@ -55,7 +55,6 @@ export function CERISummaryCards({ components, spofs }: CERISummaryCardsProps) {
                   <div className="text-sm text-sidebar-foreground/70">/ 100</div>
                 </div>
 
-                {/* progress rail */}
                 <div className="h-1.5 w-full rounded-full bg-sidebar-accent/50 overflow-hidden">
                   <div
                     className="h-full rounded-full bg-gradient-to-r from-sidebar-primary to-sidebar-primary/70 transition-all duration-500"

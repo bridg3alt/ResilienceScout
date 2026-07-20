@@ -30,12 +30,6 @@ from .copilot.agents import answer_multiagent
 
 app = FastAPI(title="ResilienceScout API", version="0.2.0")
 
-# Comma-separated origins, e.g. ALLOWED_ORIGINS="https://resiliencescout.vercel.app".
-#
-# Unset falls back to "*", which keeps the README's promise that the stack runs locally with zero
-# configuration -- a first-time reader should not have to set an environment variable to make
-# their own dashboard talk to their own backend. A deployment sets the variable and stops being
-# world-callable. The permissive default is therefore a LOCAL default, not a deployed one.
 _ALLOWED_ORIGINS = [
     o.strip() for o in os.getenv("ALLOWED_ORIGINS", "*").split(",") if o.strip()
 ] or ["*"]
@@ -49,7 +43,6 @@ app.add_middleware(
 
 
 class BuildingIn(BaseModel):
-    # mirrors resilienceos.building.Building; all optional -> sensible defaults
     name: str = "Decennial Block"
     latitude: float = 12.9716
     longitude: float = 77.5946
@@ -66,8 +59,6 @@ class BuildingIn(BaseModel):
     solar_kwp: float = 20.0
     battery_kwh: float = 0.0
     has_generator: bool = False
-    # Default 0.0 so a caller that only flips has_generator gets no energy credit — the set is
-    # then structurally present but carries nothing, matching the pre-existing behaviour.
     generator_rated_kw: float = 0.0
     generator_runtime_h: float = 0.0
     t_set_cooling: float = 26.0
@@ -93,8 +84,8 @@ def _day_for(lat: float, lon: float):
 def _run(inp: AnalyzeIn):
     b = Building(**inp.building.model_dump())
     day = _day_for(b.latitude, b.longitude)
-    hw = analyze_heatwave(b, day, hvac_active=False)     # passive survivability
-    hw_ac = analyze_heatwave(b, day, hvac_active=True)   # operational energy
+    hw = analyze_heatwave(b, day, hvac_active=False)
+    hw_ac = analyze_heatwave(b, day, hvac_active=True)
     out = analyze_outage(b, day, inp.outage_start_hour, inp.outage_duration_h)
     score = resilience_score(hw, out)
     return b, day, hw, hw_ac, out, score
@@ -159,16 +150,6 @@ def copilot(inp: CopilotIn):
     return copilot_answer(inp.question, ctx)
 
 
-# =============================================================================================
-# ResilienceScout — flood/shelter API.
-#
-# Additive: everything above (the heat/outage engine) still works unchanged. Every response
-# below carries `placeholder: true` while presets.DATA_IS_PLACEHOLDER holds, so the dashboard
-# can never present invented figures as surveyed ones.
-# =============================================================================================
-
-# Which design flood each operating phase is assessed against.
-# TODO(user): confirm the design event per phase with the disaster-management plan.
 PHASE_DEPTH_M = {
     "preparedness": presets.FLOOD_SCENARIOS_M["moderate"],
     "active_flood": presets.FLOOD_SCENARIOS_M["severe"],
@@ -189,10 +170,6 @@ def _depth_for(phase: str, explicit: float | None = None) -> float:
     return PHASE_DEPTH_M[phase]
 
 
-# Latest live flood-depth reading per site, keyed by site_id. In-memory and non-persistent: this
-# stands in for the drone/sensor telemetry the fellowship proposes to build, and a demo has no
-# business durably storing invented water levels. `_effective_depth` prefers a real reading over
-# the phase-based design-flood GUESS, so the dashboard tracks the water instead of a fixed number.
 _OBSERVATIONS: dict[str, dict] = {}
 
 
@@ -277,13 +254,6 @@ def api_sites():
         ],
         "phases": list(PHASE_DEPTH_M),
         "flood_scenarios_m": presets.FLOOD_SCENARIOS_M,
-        # The surveyed reference marks the depth control renders against: the observed flood
-        # line, the uncertainty band around every elevation, and the per-asset heights.
-        #
-        # Served rather than hardcoded in the dashboard on purpose. These are SURVEYED values,
-        # and a copy of a measurement living in the frontend is a measurement that can drift
-        # from presets.py without anything failing. The provenance discipline only holds if
-        # there is exactly one place each number is written down.
         "hazard_reference": {
             "flood_line_m": presets.FLOOD_LINE_M,
             "survey_uncertainty_m": presets.SURVEY_UNCERTAINTY_M,
@@ -291,17 +261,9 @@ def api_sites():
             "equipment_elevation_m": presets.EQUIPMENT_ELEVATION_M,
         },
         "placeholder": presets.DATA_IS_PLACEHOLDER,
-        # Named provenance, so the dashboard notice can say WHICH figures are still provisional
-        # instead of implying the whole model is unmeasured. Both are surfaced: leading with what
-        # was surveyed is the accurate framing now that most of it has been.
         "unsurveyed": presets.UNSURVEYED_VALUES,
         "surveyed": presets.SURVEYED_VALUES,
-        # What has been bounded from a desk without a site visit. Separate from `surveyed` on
-        # purpose: a derivation constrains a value, it does not measure it, and merging the two
-        # would let the dashboard imply a survey that never happened.
         "derived": presets.DERIVED_VALUES,
-        # Stated by the site owner but never checked. Its own tier for the same reason: a verbal
-        # assurance is real information and must not be shown as a measurement.
         "reported": presets.REPORTED_VALUES,
         "capacity_check": {
             s["id"]: {
@@ -356,7 +318,6 @@ def _backup_across_load_range(site_id: str, depth: float, repaired: frozenset[st
         b = Building(**{**site["building"], "critical_load_kw": load_kw})
         hours[label] = analyze_flood(b, day, depth, repaired=repaired).backup_hours
 
-    # Higher load drains storage faster, so the pessimistic end is the one to lead with.
     return {
         "critical_load_range_kw": [low_kw, high_kw],
         "critical_load_reconciled": presets.critical_load_is_reconciled(),
@@ -379,9 +340,6 @@ def api_backup(site_id: str, phase: str = "active_flood", flood_depth_m: float |
         "hours_available": flood.backup_hours,
         "hours_required": flood.required_backup_h,
         "adequate": flood.operational,
-        # Adequacy at the PESSIMISTIC end of the load disagreement. When this differs from
-        # `adequate`, whether the shelter meets its backup target depends on an unsettled survey
-        # record — which is exactly the kind of thing that must not be rounded away.
         "adequate_worst_case": rng["hours_min"] >= flood.required_backup_h,
         "hours_range": rng,
         "surviving_der": flood.surviving_der,
@@ -402,11 +360,7 @@ def api_dependency_graph(site_id: str, phase: str = "active_flood",
         "phase": phase,
         "flood_depth_m": depth,
         "single_points_of_failure": spofs,
-        # What the unmeasured elevations are worth. The model can never flood an asset it has no
-        # elevation for, so every result here quietly assumes those assets survived; this reports
-        # whether that assumption is actually load-bearing for the outcome.
         "unassessed_sensitivity": unassessed_sensitivity(graph),
-        # precomputed so the detail drawer doesn't need a round-trip per node
         "cascades": {n["id"]: downstream(graph, n["id"]) for n in graph["nodes"]},
     }
 
@@ -432,8 +386,6 @@ def api_shelter_status(phase: str = "active_flood", flood_depth_m: float | None 
             "failed_equipment": flood.failed_equipment,
             "ceri": c["score"],
             "band": c["band"],
-            # Ride-through at BOTH ends of the unreconciled critical load, so the board can show
-            # the pessimistic reading next to the headline instead of only the flattering one.
             "backup_range": _backup_across_load_range(s["id"], depth, repaired),
         })
     return {
@@ -455,7 +407,6 @@ def api_recovery(inp: RecoveryIn):
         _site, _b, _day, _flood, graph = _site_state(s["id"], depth)
         graphs.append(graph)
         failed_by_site[s["id"]] = failed_nodes(graph)
-        # Rank against the shelter's ability to carry its load, not merely its wiring.
         adequacy[s["id"]] = _adequacy_check(s["id"], depth)
     out = prioritize(graphs, failed_by_site, adequacy_by_site=adequacy)
     return {"phase": inp.phase, "flood_depth_m": last_depth, **out}
@@ -476,7 +427,6 @@ def api_copilot(inp: FloodCopilotIn):
     (the same numbers the dashboard shows), not the heat-engine stub. Reuses the existing RAG /
     multi-agent pipeline unchanged — only the grounding context differs.
     """
-    # Validate the focus shelter up front so an unknown id 404s rather than silently dropping.
     presets.get_shelter(inp.site_id)
 
     shelters, last_depth = [], _depth_for(inp.phase, inp.flood_depth_m)
@@ -505,10 +455,6 @@ def api_copilot(inp: FloodCopilotIn):
 class ObservationIn(BaseModel):
     site_id: str
     flood_depth_m: float
-    # REQUIRED, deliberately no default: the sender must say what its reading is measured
-    # against. A drone altimeter reports above mean sea level, a staff gauge reports above
-    # external ground, and this model works in metres above finished floor. Defaulting the datum
-    # would be the exact silent mismatch this field exists to prevent.
     datum: str
     source: str = "sensor"
     timestamp: str | None = None
@@ -530,7 +476,7 @@ def api_post_observation(inp: ObservationIn):
     REJECTED with 400 rather than stored at face value — a loud failure beats a plausible wrong
     number, because a datum error is invisible in the output.
     """
-    presets.get_shelter(inp.site_id)  # 404 on unknown site
+    presets.get_shelter(inp.site_id)
     try:
         depth_above_floor = presets.depth_above_floor(inp.flood_depth_m, inp.datum)
     except presets.DatumError as e:
@@ -538,9 +484,8 @@ def api_post_observation(inp: ObservationIn):
 
     reading = {
         "site_id": inp.site_id,
-        "flood_depth_m": depth_above_floor,       # converted, in ELEVATION_DATUM
+        "flood_depth_m": depth_above_floor,
         "datum": presets.ELEVATION_DATUM,
-        # Provenance: keep what the sensor actually said, so a conversion can be audited later.
         "raw_reading_m": inp.flood_depth_m,
         "raw_datum": inp.datum,
         "source": inp.source,

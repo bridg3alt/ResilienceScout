@@ -15,7 +15,6 @@ from .building import Building
 from .hazard import analyze_heatwave, analyze_outage
 from .engine import resilience_score
 
-# Indicative retrofit costs (INR). Tune to local quotes.
 RETROFITS = {
     "cool_roof": {
         "label": "Cool-roof coating",
@@ -41,15 +40,12 @@ RETROFITS = {
 
 
 def _metrics(b: Building, day: pd.DataFrame, outage_start: int, outage_dur: int) -> dict:
-    # Resilience = passive survivability when cooling is unavailable (grid-stressed
-    # heatwave / outage). With AC forced on, every building looks identical, so we
-    # score the free-float condition — that's what retrofits actually move.
     hw = analyze_heatwave(b, day, hvac_active=False)
     out = analyze_outage(b, day, outage_start, outage_dur)
     score = resilience_score(hw, out)
     return {
-        "resilience_score": score["score"],            # rounded — for display
-        "resilience_score_exact": score["score_exact"],  # unrounded — for ranking/deltas
+        "resilience_score": score["score"],
+        "resilience_score_exact": score["score_exact"],
         "band": score["band"],
         "peak_heat_index": hw.peak_heat_index,
         "safe_occupancy_hours": hw.safe_occupancy_hours,
@@ -80,8 +76,6 @@ def budget_optimizer(b: Building, day: pd.DataFrame, budget_inr: float,
     for key, spec in RETROFITS.items():
         b2 = spec["apply"](b)
         m = _metrics(b2, day, outage_start, outage_dur)
-        # Rank on the UNROUNDED score: a cheap retrofit worth <1 point is still worth doing,
-        # and rounding first zeroed it out of the ranking entirely.
         gain = m["resilience_score_exact"] - base["resilience_score_exact"]
         ranked.append({
             "key": key,
@@ -95,7 +89,6 @@ def budget_optimizer(b: Building, day: pd.DataFrame, budget_inr: float,
         })
     ranked.sort(key=lambda r: r["gain_per_lakh"], reverse=True)
 
-    # greedy selection within budget
     remaining = budget_inr
     chosen = []
     for r in ranked:

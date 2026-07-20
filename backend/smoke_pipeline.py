@@ -6,13 +6,12 @@ from resilienceos.hazard import analyze_heatwave, analyze_outage
 from resilienceos.engine import resilience_score, operational_plan, outage_sequence
 from resilienceos.scenarios import compare, budget_optimizer
 
-b = Building(battery_kwh=20)   # give it a battery so backup math is interesting
+b = Building(battery_kwh=20)
 fc = wx.fetch_forecast(b.latitude, b.longitude, days=3)
 day = wx.hottest_day(fc)
 
-# Passive survivability = the resilience-relevant condition (grid-stressed heatwave)
 hw = analyze_heatwave(b, day, hvac_active=False)
-hw_ac = analyze_heatwave(b, day, hvac_active=True)  # operational energy view
+hw_ac = analyze_heatwave(b, day, hvac_active=True)
 out = analyze_outage(b, day, start_hour=14, duration_h=6)
 score = resilience_score(hw, out)
 print(f"(AC-on cooling peak for energy planning: {hw_ac.peak_indoor}C indoor, "

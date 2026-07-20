@@ -15,8 +15,6 @@ import type { DependencyGraphResponse, GraphNode, Health } from "../lib/api";
 
 const HEALTH_FILL: Record<Health, string> = {
   ok: "#10b981",
-  // A paler green than `ok`, deliberately: reported-dry reads as working at a glance, which it is,
-  // while still being visibly not the same claim as a measured elevation.
   ok_reported: "#6ee7b7",
   at_risk: "#f59e0b",
   failed: "#ef4444",
@@ -112,7 +110,6 @@ export function DependencyMap({ graph }: DependencyMapProps) {
                 </marker>
               </defs>
 
-              {/* edges: provider -> dependent, drawn right-to-left toward the shelter */}
               {graph.edges.map((e, i) => {
                 const from = positions[e.from];
                 const to = positions[e.to];
@@ -137,7 +134,6 @@ export function DependencyMap({ graph }: DependencyMapProps) {
                 );
               })}
 
-              {/* nodes */}
               {graph.nodes.map((n) => {
                 const p = positions[n.id];
                 const fill = HEALTH_FILL[n.health];

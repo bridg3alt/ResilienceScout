@@ -24,7 +24,7 @@ _HOURLY = [
 _RENAME = {
     "temperature_2m": "temp",
     "relative_humidity_2m": "rh",
-    "shortwave_radiation": "ghi",       # global horizontal irradiance [W/m2]
+    "shortwave_radiation": "ghi",
     "cloud_cover": "cloud",
     "wind_speed_10m": "wind",
 }
@@ -72,7 +72,7 @@ def heat_index_c(temp_c: float, rh: float) -> float:
     NOAA Rothfusz heat index in Celsius. Valid when it's hot; below ~27C it just
     returns the air temperature.
     """
-    t = temp_c * 9 / 5 + 32  # to Fahrenheit
+    t = temp_c * 9 / 5 + 32
     if t < 80:
         return temp_c
     hi = (
@@ -86,7 +86,7 @@ def heat_index_c(temp_c: float, rh: float) -> float:
         + 0.00085282 * t * rh * rh
         - 0.00000199 * t * t * rh * rh
     )
-    return (hi - 32) * 5 / 9  # back to Celsius
+    return (hi - 32) * 5 / 9
 
 
 def hottest_day(df: pd.DataFrame) -> pd.DataFrame:

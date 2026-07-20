@@ -21,7 +21,6 @@ export function Sidebar({ currentPage, onPageChange }: SidebarProps) {
   const handleNavigationClick = (pageId: string) => {
     if (!isExpanded) {
       setIsExpanded(true);
-      // Delay the page change to allow expansion animation
       setTimeout(() => onPageChange(pageId), 150);
     } else {
       onPageChange(pageId);
@@ -70,9 +69,7 @@ export function Sidebar({ currentPage, onPageChange }: SidebarProps) {
           isExpanded ? "w-64" : "w-20"
         )}
       >
-        {/* Header with Logo */}
         <div className="p-6 flex flex-col items-center relative">
-          {/* Close button when expanded */}
           {isExpanded && (
             <button
               onClick={() => setIsExpanded(false)}
@@ -97,7 +94,6 @@ export function Sidebar({ currentPage, onPageChange }: SidebarProps) {
           )}
         </div>
 
-        {/* Navigation */}
         <nav className="flex-1 px-4 py-6">
           <div className="space-y-4">
             {navigationItems.map((item) => {
@@ -145,7 +141,6 @@ export function Sidebar({ currentPage, onPageChange }: SidebarProps) {
                       </div>
                     )}
                     
-                    {/* Active indicator */}
                     {isActive && !isExpanded && (
                       <>
                         <div className="absolute inset-0 rounded-full bg-sidebar-primary opacity-20 animate-pulse" />
@@ -153,18 +148,15 @@ export function Sidebar({ currentPage, onPageChange }: SidebarProps) {
                       </>
                     )}
                     
-                    {/* Active indicator for expanded state */}
                     {isActive && isExpanded && (
                       <div className="absolute right-2 top-1/2 -translate-y-1/2 w-2 h-2 bg-sidebar-primary-foreground rounded-full animate-pulse" />
                     )}
                   </button>
 
-                  {/* Tooltip for collapsed state */}
                   {!isExpanded && (
                     <div className="absolute left-full ml-4 px-3 py-2 bg-gradient-to-br from-sidebar-primary to-sidebar-primary/90 text-sidebar-primary-foreground rounded-xl opacity-0 group-hover:opacity-100 transition-all duration-300 pointer-events-none whitespace-nowrap z-50 shadow-lg transform translate-x-2 group-hover:translate-x-0">
                       <div className="font-medium text-sm">{item.name}</div>
                       <div className="text-xs opacity-75 mt-1">{item.description}</div>
-                      {/* Tooltip arrow */}
                       <div className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1 w-2 h-2 bg-sidebar-primary rotate-45" />
                     </div>
                   )}
@@ -174,7 +166,6 @@ export function Sidebar({ currentPage, onPageChange }: SidebarProps) {
           </div>
         </nav>
 
-        {/* User Profile Section */}
         <div className="p-4 flex justify-center">
           <div className="relative group">
             <div 
@@ -184,17 +175,14 @@ export function Sidebar({ currentPage, onPageChange }: SidebarProps) {
               <span className="text-sidebar-primary-foreground font-semibold text-lg">LG</span>
             </div>
             
-            {/* Profile tooltip for collapsed state */}
             {!isExpanded && (
               <div className="absolute left-full ml-4 px-3 py-2 bg-gradient-to-br from-sidebar-primary to-sidebar-primary/90 text-sidebar-primary-foreground rounded-xl opacity-0 group-hover:opacity-100 transition-all duration-300 pointer-events-none whitespace-nowrap z-50 shadow-lg transform translate-x-2 group-hover:translate-x-0">
                 <div className="font-medium text-sm">Liam Gallagher</div>
                 <div className="text-xs opacity-75 mt-1">System Administrator</div>
-                {/* Tooltip arrow */}
                 <div className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1 w-2 h-2 bg-sidebar-primary rotate-45" />
               </div>
             )}
             
-            {/* Profile info for expanded state */}
             {isExpanded && (
               <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 text-center">
                 <div className="text-sidebar-foreground font-medium text-sm whitespace-nowrap">

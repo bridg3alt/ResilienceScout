@@ -18,10 +18,8 @@ from collections import deque
 
 from . import presets
 
-# Assets that can independently carry the shelter's critical load.
 POWER_SOURCES = ("transformer", "battery", "solar_inverter", "generator")
 
-# tier drives the layered layout the dashboard renders (0 = shelter, left/top).
 _TIERS = {
     "shelter": 0,
     "distribution_panel": 1, "comms": 1, "ups": 1,
@@ -43,36 +41,18 @@ _LABELS = {
     "substation": "Campus substation (11 kV)",
 }
 
-# provider -> dependents. Every power source feeds the shelter THROUGH the distribution panel:
-# that is what makes the panel a genuine single point of failure, and modelling sources as
-# wiring straight into the shelter would hide it.
 _DEPENDENCIES = [
-    # SOURCED: the site survey confirmed the campus 11 kV substation is the grid feed for this
-    # block, upstream of its 250 kVA transformer. Modelled now that the connection is confirmed;
-    # before the survey it was deliberately left out rather than assumed.
-    # Consequence: the grid path is only alive if BOTH substation and transformer are alive, so
-    # losing the substation drops the grid but not the shelter — battery/solar/generator still
-    # carry it. That is the graph earning its keep rather than a checklist.
-    # TODO(user): the substation's elevation was not surveyed, so it has no entry in
-    # EQUIPMENT_ELEVATION_M and therefore never floods in the model. Measure it — a substation
-    # below the water line would take the grid out earlier than the model currently shows.
     ("substation", "transformer"),
     ("transformer", "distribution_panel"),
     ("battery", "distribution_panel"),
     ("solar_inverter", "distribution_panel"),
     ("generator", "distribution_panel"),
     ("distribution_panel", "shelter"),
-    ("solar_panels", "solar_inverter"),   # panels feed the inverter, not the shelter directly
-    ("road_access", "generator"),         # no road, no fuel resupply
-    # SOURCED: the UPS backs the IT load only — server rack (1.2 kW) + network (0.8 kW) — so it
-    # sits between the panel and comms rather than under the shelter. That placement is the whole
-    # point: a UPS wired to the shelter node would register as a single point of failure, which
-    # would be false, because losing it costs coordination and transfer-window ride-through, not
-    # the shelter's power. Losing the panel already takes comms down; the UPS is what carries the
-    # IT load across the seconds between mains loss and the generator's ATS picking up.
+    ("solar_panels", "solar_inverter"),
+    ("road_access", "generator"),
     ("distribution_panel", "ups"),
     ("ups", "comms"),
-    ("comms", "shelter"),                 # coordination, not power — never gates power
+    ("comms", "shelter"),
 ]
 
 
@@ -146,9 +126,6 @@ def node_health(asset: str, flood) -> str:
         return "failed" if not flood.operational else "ok"
     if asset in flood.failed_equipment:
         return "failed"
-    # Reported by the site owner as above any credible flood level, without a height being given.
-    # Distinct from both "ok" (measured dry) and "unknown" (nobody knows): the claim is used, but
-    # it is labelled so the dashboard never presents hearsay as a survey result.
     if asset in presets.REPORTED_ABOVE_FLOOD:
         return "ok_reported"
     elev = presets.EQUIPMENT_ELEVATION_M.get(asset)
@@ -214,7 +191,7 @@ def single_points_of_failure(graph: dict) -> list[str]:
     """
     ids = {n["id"] for n in graph["nodes"]}
     if not shelter_powered(graph, set()):
-        return []   # already unpowered with nothing failed; SPOF is not meaningful
+        return []
     return sorted(c for c in ids - {"shelter"} if not shelter_powered(graph, {c}))
 
 
@@ -265,8 +242,6 @@ def unassessed_sensitivity(graph: dict) -> dict:
         "powered_if_unassessed_survive": powered_optimistic,
         "powered_if_unassessed_fail": powered_pessimistic,
         "changes_outcome": powered_optimistic != powered_pessimistic,
-        # SPOFs can appear only in the pessimistic world; naming them tells the reader which
-        # measurement would change the recommendation, not merely that one is missing.
         "spofs_if_unassessed_fail": sorted(
             c for c in {n["id"] for n in graph["nodes"]} - {"shelter"}
             if not shelter_powered(graph, (already_failed | unknown) | {c})

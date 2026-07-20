@@ -18,9 +18,6 @@ import type { HazardReference } from "../lib/api";
  * from presets.py, which is exactly the failure the provenance registries exist to prevent.
  */
 
-// The slider's upper bound. Covers the severe design flood (1.20 m) and every asset mounted at
-// ground level; the roof PV array (9.6 m) sits far off this scale and is never the binding
-// constraint, so stretching the axis to reach it would waste the whole range on empty space.
 const MAX_DEPTH_M = 2.0;
 
 /** "solar_inverter" -> "Solar inverter". Derived rather than mapped, so asset labels keep a
@@ -46,31 +43,18 @@ export function FloodDepthControl({
   isOverridden,
   reference,
 }: FloodDepthControlProps) {
-  // Assets on the slider's scale, shallowest first.
-  //
-  // Only the upper end is filtered: an asset far above the axis (the 9.6 m roof array) would pin
-  // to the right edge and imply a proximity that isn't real. The LOWER end is deliberately kept.
-  // Road access sits at -0.08 m -- below the finished floor -- so it is already under water at
-  // every depth on this scale, and it is the asset that cuts generator fuel resupply. Filtering
-  // it out for being off-scale would hide the first thing this site loses.
   const assets = Object.entries(reference?.equipment_elevation_m ?? {})
     .filter(([, elev]) => elev <= MAX_DEPTH_M)
     .sort((a, b) => a[1] - b[1]);
 
   const margin = reference?.at_risk_margin_m;
 
-  // The asset the outcome next turns on: the shallowest one still above the water. This is what
-  // makes the readout a margin rather than a status.
   const nextAsset = assets.find(([, elev]) => elev > depthM);
   const distanceToNext = nextAsset ? nextAsset[1] - depthM : null;
 
-  // Inside the survey's own error bars, the model cannot honestly say which side of the asset
-  // the water is on -- which is why node_health reports `at_risk` here instead of `ok`.
   const withinNoise =
     distanceToNext !== null && margin !== undefined && distanceToNext <= margin;
 
-  // Clamped, so an asset below the finished floor pins to the left edge instead of rendering
-  // off-card at a negative offset. It reads as "already gone", which is exactly what it is.
   const pct = (m: number) => Math.min(100, Math.max(0, (m / MAX_DEPTH_M) * 100));
 
   return (
@@ -105,14 +89,6 @@ export function FloodDepthControl({
             aria-label="Flood depth above finished floor, metres"
           />
 
-          {/* Surveyed asset heights, positioned on the same scale as the slider. A reader can
-              see WHY the score moves where it moves instead of watching a number jump.
-
-              Labels alternate between two rows. On this site the upper assets land 10% apart
-              (distribution panel 80%, solar inverter 90%, comms 100%) while the label text needs
-              rather more than 10% of the card to fit, so a single row overlaps into mush exactly
-              where the reader is looking. Staggering doubles the room each label gets without
-              shrinking the type or dropping any asset. */}
           <div className="relative h-12">
             {reference && (
               <div
@@ -124,8 +100,6 @@ export function FloodDepthControl({
             {assets.map(([id, elev], i) => {
               const drowned = elev <= depthM;
               const p = pct(elev);
-              // Ticks at the extremes would hang off the card if centred on their own position,
-              // so the end labels align inward instead of straddling the edge.
               const anchor = p <= 2 ? "translateX(0)" : p >= 98 ? "translateX(-100%)" : "translateX(-50%)";
               const lower = i % 2 === 1;
               return (
@@ -154,9 +128,6 @@ export function FloodDepthControl({
           </div>
         </div>
 
-        {/* The verdict line. Phrased as a distance to the next failure, because that is the
-            quantity a facilities manager can actually act on -- and, when the water is inside
-            the survey's uncertainty, it says so rather than picking a side. */}
         {distanceToNext !== null && nextAsset && (
           <div
             className={`rounded-md border px-3 py-2 text-xs leading-relaxed ${

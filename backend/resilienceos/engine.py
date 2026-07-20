@@ -15,12 +15,6 @@ from .building import Building
 from .hazard import HeatwaveResult, OutageResult, HI_CAUTION
 from .solar import pv_generation_kw
 
-# Heat-index degree-hours above caution at which the thermal sub-score halves.
-# Chosen against MEASURED exposure from the twin, which spans ~13 C.h (mild) to ~860 C.h
-# (severe free-float). An exponential decay was tried first and rejected: exp(-degh/40)
-# underflows to 0 above ~200 C.h, which silently re-created the very saturation this replaces.
-# A hyperbolic decay keeps resolution across the whole real range.
-# TODO(user): re-anchor against surveyed comfort outcomes once field data exists.
 DEGH_HALF = 200.0
 
 
@@ -40,17 +34,11 @@ def resilience_score(hw: HeatwaveResult, outage: OutageResult) -> dict:
     """
     habitability = (hw.safe_occupancy_hours / hw.occupied_hours) if hw.occupied_hours else 1.0
     exceedance = 1.0 / (1.0 + hw.exceedance_degh / DEGH_HALF)
-    # Upper clamp only: exceeding the 6h backup target earns no extra credit, but the reward
-    # end is never floored (that asymmetry is exactly what broke the old headroom term).
     backup = min(1.0, outage.backup_hours / 6.0)
 
     score = 100 * (0.45 * habitability + 0.30 * exceedance + 0.25 * backup)
     return {
         "score": round(score),
-        # Unrounded score for RANKING. Rounding to int destroys sub-point differences, and a
-        # cheap-but-real retrofit can easily be worth <1 point — rounding first made the budget
-        # optimizer see a 0 gain and refuse to recommend it. Display uses `score`; comparisons
-        # must use `score_exact`.
         "score_exact": round(score, 3),
         "band": _band(score),
         "components": {
@@ -78,20 +66,6 @@ def ceri_score(flood, graph: dict, b: Building) -> dict:
     from . import presets
     from .dependency_graph import single_points_of_failure
 
-    # DER capable of carrying critical load. Ratio >= 1 means fully covered; upper-clamped
-    # because over-provisioning past the need earns no more credit.
-    #
-    # Two defects fixed here together, both of which made this sub-score blind:
-    #
-    #   1. It read `battery_kwh` alone while calling itself "DER capable of carrying critical
-    #      load", so a shelter with a surveyed 62.5 kVA set and 14 h of fuel scored as if it had
-    #      none — the same omission that kept the generator out of backup_duration_h.
-    #   2. It read the building's NAMEPLATE rather than what survived the flood, so it returned an
-    #      identical figure at every depth. A sub-score that cannot move with the hazard is not
-    #      measuring readiness against that hazard.
-    #
-    # Now sourced from `flood.surviving_der`, so drowning the battery or the generator lowers it.
-    # Together with backup_duration this is 60% of CERI.
     surviving = flood.surviving_der
     if b.critical_load_kw > 0:
         battery_h = surviving["battery_kwh"] / b.critical_load_kw
@@ -100,7 +74,6 @@ def ceri_score(flood, graph: dict, b: Building) -> dict:
         der_cover = 1.0
     energy_readiness = min(1.0, der_cover)
 
-    # Elevation margin of the WEAKEST power-relevant asset over the flood line.
     margins = [
         presets.EQUIPMENT_ELEVATION_M[n["id"]] - presets.FLOOD_LINE_M
         for n in graph["nodes"]
@@ -108,9 +81,6 @@ def ceri_score(flood, graph: dict, b: Building) -> dict:
     ]
     if margins:
         worst = min(margins)
-        # Logistic on the margin: continuous either side of the flood line, so a deeply
-        # submerged asset still scores worse than a marginally submerged one and any
-        # re-siting always registers. Clamped at neither end.
         flood_readiness = 1.0 / (1.0 + math.exp(-worst / 0.3))
     else:
         flood_readiness = 0.0
@@ -171,29 +141,24 @@ def operational_plan(b: Building, day: pd.DataFrame, hw: HeatwaveResult) -> list
             "category": category,
         })
 
-    # Overnight — charge storage & flush heat
     if b.battery_kwh > 0:
         add(22, "Charge battery to full", "Off-peak grid hours; reserve capacity for tomorrow's peak and any outage.", "storage")
     add(23, "Night-purge ventilation (open up / run fans)",
         "Outdoor air is coolest overnight; flush accumulated heat from the thermal mass before sunrise.", "ventilation")
 
-    # Pre-cool before the heat builds, using early solar
     add(6, "Pre-cool occupied classrooms/offices to lower setpoint",
         f"Cheap morning cooling (solar ramping, mild ambient) banks 'coolth' in the mass before the {peak_hour:02d}:00 peak of {hw.peak_outdoor:.0f}C.",
         "cooling")
 
-    # Ride solar through midday
     if b.solar_kwp > 0:
         add(max(solar_peak_hour - 2, 9), "Run cooling from rooftop solar",
             f"PV output peaks around {solar_peak_hour:02d}:00 (~{max(solar):.0f} kW); self-consume it to cool at near-zero marginal cost.",
             "solar")
 
-    # Peak-heat load management
     add(peak_hour, "Ease mechanical cooling; prioritise fans + shading in low-occupancy rooms",
         f"Indoor heat index peaks near {hw.peak_heat_index:.0f}C; concentrate cooling on occupied critical rooms, coast on stored coolth elsewhere.",
         "load_mgmt")
 
-    # Vulnerability flag
     if hw.hours_above_caution > 0:
         add(peak_hour, "Move occupants to designated cool refuge room(s)",
             f"{hw.hours_above_caution}h above the {HI_CAUTION:.0f}C caution threshold today; keep the most vulnerable in the best-conditioned space.",

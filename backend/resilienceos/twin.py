@@ -36,7 +36,6 @@ def simulate(
     zone_hvac, geo = build_zone(building, hvac_active=True)
     zone_free, _ = build_zone(building, hvac_active=False)
 
-    # Solar aperture: multiply GHI [W/m2] to get solar gains [W]
     from .building import solar_aperture_m2
     aperture = solar_aperture_m2(building, geo)
 
@@ -50,7 +49,6 @@ def simulate(
         sg = aperture * float(w["ghi"])
         t_out = float(w["temp"])
 
-        # Is the building drawing grid/backup power this hour?
         in_outage = (
             outage_start_hour is not None
             and outage_duration_h is not None
@@ -60,7 +58,6 @@ def simulate(
         use_hvac = hvac_active and building.has_hvac and powered
 
         zone = zone_hvac if use_hvac else zone_free
-        # keep both zones' mass temps in sync so switching modes is continuous
         zone.solve_energy(ig, sg, t_out, t_m_prev)
         t_m_prev = zone.t_m_next
 

@@ -22,7 +22,7 @@ def check(name, condition, detail=""):
 
 
 def main():
-    b = Building()  # default decennial block, Bangalore coords
+    b = Building()
     print(f"Fetching Open-Meteo forecast for {b.name} ({b.latitude},{b.longitude})...")
     fc = wx.fetch_forecast(b.latitude, b.longitude, days=3)
     day = wx.hottest_day(fc)
@@ -31,7 +31,6 @@ def main():
 
     ok = True
 
-    # --- 1. Free-float (no HVAC): thermal lag, stays sane vs outdoor -------------
     free = simulate(b, day, hvac_active=False)
     out_peak = day["temp"].max()
     out_peak_hour = int(day.loc[day["temp"].idxmax(), "hour"])
@@ -44,11 +43,6 @@ def main():
     ok &= check("thermal lag: indoor peaks at/after outdoor peak",
                 in_peak_hour >= out_peak_hour,
                 f"indoor peak {in_peak_hour}h vs outdoor {out_peak_hour}h")
-    # Swing damping is a CONDUCTION property — thermal mass damps the transmitted outdoor
-    # AIR swing. Solar gain through glazing can legitimately push the free-float indoor swing
-    # past the outdoor air swing on a muted-swing (cloudy/monsoon) day, so damping is tested on
-    # a solar-zeroed run. Comparing the with-solar swing to raw outdoor air tests the weather,
-    # not the mass, and fails whenever the sky is overcast.
     free_nosun = simulate(replace(b, solar_aperture_scale=0.0), day, hvac_active=False)
     nosun_swing = free_nosun["indoor_temp"].max() - free_nosun["indoor_temp"].min()
     out_swing = out_peak - day["temp"].min()
@@ -56,7 +50,6 @@ def main():
                 nosun_swing <= out_swing + 0.5,
                 f"indoor swing {nosun_swing:.1f} vs outdoor {out_swing:.1f}")
 
-    # --- 2. HVAC on bends the curve down ---------------------------------------
     ac = simulate(b, day, hvac_active=True)
     print("\n2) HVAC on:")
     ok &= check("AC lowers peak indoor temp vs free-float",
@@ -68,7 +61,6 @@ def main():
     ok &= check("AC draws cooling electricity", ac["cooling_kw"].max() > 0,
                 f"peak {ac['cooling_kw'].max():.1f} kW")
 
-    # --- 3. Heavier thermal mass -> lower, later peak (free-float) --------------
     light = simulate(replace(b, mass_class="light"), day, hvac_active=False)
     heavy = simulate(replace(b, mass_class="heavy"), day, hvac_active=False)
     print("\n3) Thermal mass:")
@@ -76,7 +68,6 @@ def main():
                 heavy["indoor_temp"].max() < light["indoor_temp"].max(),
                 f"heavy {heavy['indoor_temp'].max():.1f}C vs light {light['indoor_temp'].max():.1f}C")
 
-    # --- 4. Cool roof -> lower peak (free-float) --------------------------------
     bare = simulate(replace(b, roof_material="rcc_bare"), day, hvac_active=False)
     cool = simulate(replace(b, roof_material="cool_roof"), day, hvac_active=False)
     print("\n4) Cool roof:")
@@ -85,7 +76,6 @@ def main():
                 f"cool {cool['indoor_temp'].max():.1f}C vs bare {bare['indoor_temp'].max():.1f}C")
 
     print("\n" + ("ALL CHECKS PASSED" if ok else "SOME CHECKS FAILED"))
-    # quick profile dump
     print("\nHourly free-float vs outdoor (spot check):")
     prof = free[["hour", "t_out", "indoor_temp", "heat_index"]].copy()
     with pd.option_context("display.max_rows", 30):
