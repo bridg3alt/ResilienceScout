@@ -130,10 +130,10 @@ Every campus-specific number is classified into one of four disjoint registries,
   treating them as instruments claims a rigour nobody applied.
 - **Still provisional** — not known.
 
-The dashboard's "N of M values still provisional" notice is *derived* from the provisional
-registry, not hand-set. It cannot be cleared by editing a flag — only by replacing named values
-with measurements. The test suite asserts the four registries stay disjoint, so an entry can never
-be retired by moving it between tiers instead of measuring something.
+The "still provisional" flag every API response carries is *derived* from that registry, not
+hand-set. It cannot be cleared by editing a flag — only by replacing named values with
+measurements. The test suite asserts the four registries stay disjoint, so an entry can never be
+retired by moving it between tiers instead of measuring something.
 
 Where a value cannot even be bounded, its absence is **priced**: the model runs the dependency
 graph with unmeasured assets both dry and failed, and reports whether the outcome actually turns

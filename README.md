@@ -40,7 +40,7 @@ Built for the 2026 NY Climate Exchange Climate Tech Fellowship (Energy × Urban 
 >
 > **Still provisional (`UNSURVEYED_VALUES`)** — `REPAIR_EFFORT_H`. `DATA_IS_PLACEHOLDER` is
 > *derived* from this registry rather than hand-set, flowing to `placeholder: true` on every API
-> response and a persistent UI notice. Neither a report nor a derivation clears it: a report is
+> response. Neither a report nor a derivation clears it: a report is
 > unverified and a bound constrains rather than measures, which is why all four registries are
 > kept disjoint and asserted so in the test suite.
 >

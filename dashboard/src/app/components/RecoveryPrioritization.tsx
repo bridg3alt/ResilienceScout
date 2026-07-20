@@ -35,24 +35,15 @@ export function RecoveryPrioritization({ recovery }: RecoveryPrioritizationProps
             No repairs needed at this water level
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3 text-sm text-sidebar-foreground/70">
+        {/* Two short lines. The endpoint and script names that used to sit here were build
+            instructions showing through the product surface -- the depth control is now the
+            obvious way to reach a failure, so pointing at it is enough. */}
+        <CardContent className="space-y-2 text-sm text-sidebar-foreground/70">
           <p>
-            At {recovery.flood_depth_m.toFixed(2)} m of water, equipment has been damaged — but at
-            least one power source stayed dry and above the water line, so the shelter never lost
-            power. There is no repair to prioritise because nothing needs restoring to keep the
-            lights on.
+            Equipment has flooded at {recovery.flood_depth_m.toFixed(2)} m, but a power source
+            stayed dry — so the shelter never lost power and there is nothing to restore.
           </p>
-          <p>
-            That is the dependency graph doing its job. A damage checklist would list the flooded
-            transformer and battery as failures and stop there; the graph shows the shelter is
-            still carried by what survived.
-          </p>
-          <p className="text-xs">
-            To see the ranking with real failures, drag the flood depth above the generator — or
-            send a higher reading through <span className="font-mono">POST /api/observations</span>{" "}
-            (see <span className="font-mono">scripts/simulate_drone.py</span>), and this page will
-            update on its own.
-          </p>
+          <p className="text-xs">Raise the flood depth above the generator to rank real repairs.</p>
         </CardContent>
       </Card>
     );

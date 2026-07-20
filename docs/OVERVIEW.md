@@ -174,8 +174,10 @@ that live depth instead of the fixed phase-based guess (`_effective_depth` in `a
 UI polls every few seconds so it updates on its own with zero clicks.
 
 Every response carries `placeholder: true` while `DATA_IS_PLACEHOLDER` is set. `/api/sites` and
-`/health` additionally carry `unsurveyed` (and `/api/sites` carries `surveyed`) — the named
-provenance registry the dashboard notice renders from.
+`/health` additionally carry `unsurveyed` (and `/api/sites` carries `surveyed`, `derived` and
+`reported`) — the named provenance registries, served so any consumer can report which figures
+are measured. The dashboard no longer renders them; the guarantee is enforced in the API and the
+test suite rather than in a panel a reader can scroll past.
 
 ---
 
@@ -303,10 +305,18 @@ a regulatory threshold — never claim a shelter "meets the standard" on backup 
 
 **How the honesty is enforced in code:** `DATA_IS_PLACEHOLDER` is *derived* — it is
 `bool(UNSURVEYED_VALUES)`, not a hand-set flag — and flows to `placeholder: true` on every API
-response. The dashboard renders a persistent, non-dismissible notice reading *"N of M values still
-provisional"*, which expands to name what was measured and what was not, straight from the same
-registry. It cannot be cleared by editing a boolean: the only way to clear it is to replace the
-named values with measurements. **[docs/SURVEY.md](SURVEY.md)** §7 is exactly what that takes.
+response, and is carried alongside the named registries so any consumer can say which figures are
+measured and which are not. It cannot be cleared by editing a boolean: the only way to clear it is
+to replace the named values with measurements, and the test suite asserts the four registries stay
+disjoint so an entry can never be retired by moving it between tiers.
+**[docs/SURVEY.md](SURVEY.md)** §7 is exactly what that takes.
+
+The dashboard used to render this as a persistent notice. It was removed for being a wall of
+explanation in a product surface — a presentation decision, and worth being clear about what it
+did and did not change. The guarantee was never the panel: it is that `DATA_IS_PLACEHOLDER` is
+derived from the registry and travels on every response. What the removal does cost is
+*confrontation* — a reader of the dashboard alone is no longer told which numbers are unmeasured,
+and now has to consult the API or these docs to find out.
 
 ---
 
