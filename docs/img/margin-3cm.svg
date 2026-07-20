@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 430" width="880" height="430" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif">
+  <defs>
+    <pattern id="hatch" width="6" height="6" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
+      <line x1="0" y1="0" x2="0" y2="6" stroke="#52514e" stroke-width="1" opacity="0.4"/>
+    </pattern>
+    <marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#0b0b0b"/>
+    </marker>
+  </defs>
+
+  <rect width="880" height="430" fill="#fcfcfb"/>
+  <rect x="0.5" y="0.5" width="879" height="429" fill="none" stroke="#e1e0d9"/>
+
+  <text x="30" y="30" font-size="12" font-weight="600" letter-spacing="1.2" fill="#898781">A DECISION MARGIN BELOW MEASUREMENT RESOLUTION</text>
+
+  <!-- elevation axis -->
+  <line x1="120" y1="70" x2="120" y2="340" stroke="#c3c2b7"/>
+  <g font-size="11" fill="#898781" text-anchor="end">
+    <text x="112" y="84">1.00 m</text>
+    <text x="112" y="149">0.75 m</text>
+    <text x="112" y="214">0.50 m</text>
+    <text x="112" y="279">0.25 m</text>
+    <text x="112" y="344">0.00 m</text>
+  </g>
+  <g stroke="#e1e0d9">
+    <line x1="120" y1="80" x2="560" y2="80"/>
+    <line x1="120" y1="145" x2="560" y2="145"/>
+    <line x1="120" y1="210" x2="560" y2="210"/>
+    <line x1="120" y1="275" x2="560" y2="275"/>
+  </g>
+
+  <!-- floodwater to 0.82 m -->
+  <rect x="120" y="127" width="440" height="213" fill="#cde2fb"/>
+  <line x1="120" y1="127" x2="560" y2="127" stroke="#2a78d6" stroke-width="2"/>
+
+  <!-- finished floor -->
+  <line x1="120" y1="340" x2="580" y2="340" stroke="#0b0b0b" stroke-width="2.5"/>
+  <text x="124" y="358" font-size="11.5" fill="#0b0b0b">finished floor level — 0.00 m</text>
+
+  <!-- alternator at 0.85 m -->
+  <line x1="120" y1="119" x2="560" y2="119" stroke="#d03b3b" stroke-width="2" stroke-dasharray="6 4"/>
+  <rect x="404" y="94" width="156" height="22" rx="4" fill="#fcfcfb" stroke="#d03b3b"/>
+  <text x="482" y="109" font-size="11" text-anchor="middle" fill="#d03b3b" font-weight="600">alternator — 0.85 m</text>
+  <text x="124" y="145" font-size="11.5" fill="#2a78d6" font-weight="600">observed 2018 high-water mark — 0.82 m</text>
+
+  <!-- leader from the true-scale gap to the detail inset -->
+  <circle cx="250" cy="123" r="9" fill="none" stroke="#0b0b0b" stroke-width="1.2"/>
+  <path d="M256 130 L296 178" stroke="#0b0b0b" stroke-width="1" stroke-dasharray="3 3" fill="none"/>
+
+  <!-- ================= magnified detail ================= -->
+  <rect x="290" y="178" width="266" height="150" rx="8" fill="#fcfcfb" stroke="#0b0b0b" stroke-width="1.2"/>
+  <text x="302" y="196" font-size="10.5" font-weight="600" letter-spacing="0.8" fill="#898781">DETAIL — VERTICAL SCALE ×8</text>
+
+  <rect x="302" y="206" width="242" height="96" fill="url(#hatch)"/>
+  <line x1="302" y1="242" x2="544" y2="242" stroke="#d03b3b" stroke-width="2" stroke-dasharray="6 4"/>
+  <line x1="302" y1="266" x2="544" y2="266" stroke="#2a78d6" stroke-width="2"/>
+
+  <path d="M330 242 V266" stroke="#0b0b0b" stroke-width="1.2" marker-start="url(#a2)" marker-end="url(#a2)"/>
+  <rect x="338" y="245" width="42" height="18" rx="3" fill="#fcfcfb"/>
+  <text x="344" y="259" font-size="13" font-weight="700" fill="#0b0b0b">3 cm</text>
+
+  <text x="398" y="222" font-size="10.5" fill="#52514e">±6 cm survey uncertainty (2σ)</text>
+  <text x="398" y="294" font-size="10.5" fill="#52514e">— it spans both measurements</text>
+  <text x="302" y="320" font-size="11.5" fill="#0b0b0b">The entire margin between operational and dead.</text>
+
+  <!-- outcome chips -->
+  <rect x="620" y="180" width="230" height="86" rx="8" fill="#ffffff" stroke="#0ca30c" stroke-width="1.5"/>
+  <text x="638" y="206" font-size="12" fill="#52514e">at 0.82 m</text>
+  <text x="638" y="238" font-size="30" font-weight="700" fill="#0b0b0b">76</text>
+  <text x="690" y="238" font-size="14" font-weight="600" fill="#0ca30c">Resilient</text>
+  <text x="638" y="257" font-size="11.5" fill="#52514e">14.0 h sustainable operation</text>
+
+  <rect x="620" y="282" width="230" height="86" rx="8" fill="#ffffff" stroke="#d03b3b" stroke-width="1.5"/>
+  <text x="638" y="308" font-size="12" fill="#52514e">at 0.85 m</text>
+  <text x="638" y="340" font-size="30" font-weight="700" fill="#0b0b0b">16</text>
+  <text x="690" y="340" font-size="14" font-weight="600" fill="#d03b3b">Critical</text>
+  <text x="638" y="359" font-size="11.5" fill="#52514e">0.0 h sustainable operation</text>
+
+  <line x1="30" y1="388" x2="850" y2="388" stroke="#e1e0d9"/>
+  <text x="30" y="408" font-size="12" fill="#0b0b0b">The margin is a measurement, not a modelling choice. Because it is narrower than the survey's own uncertainty, the system</text>
+  <text x="30" y="424" font-size="12" fill="#0b0b0b">reports this asset as <tspan font-weight="700">at risk</tspan> rather than asserting a state it cannot justify.</text>
+</svg>

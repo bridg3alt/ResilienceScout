@@ -1,0 +1,98 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 610" width="900" height="610" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif">
+  <defs>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#898781"/>
+    </marker>
+    <marker id="ahb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#2a78d6"/>
+    </marker>
+  </defs>
+
+  <rect width="900" height="610" fill="#fcfcfb"/>
+  <rect x="0.5" y="0.5" width="899" height="609" fill="none" stroke="#e1e0d9"/>
+
+  <!-- column labels -->
+  <text x="40" y="30" font-size="12" font-weight="600" letter-spacing="1.2" fill="#898781">SENSING INPUTS</text>
+  <text x="400" y="30" font-size="12" font-weight="600" letter-spacing="1.2" fill="#2a78d6">CONSEQUENCE REASONING CORE</text>
+
+  <!-- sensing boxes -->
+  <g font-size="13" fill="#0b0b0b">
+    <rect x="40" y="78"  width="190" height="38" rx="6" fill="#f9f9f7" stroke="#e1e0d9"/>
+    <text x="56" y="102">Manual survey</text>
+    <rect x="40" y="128" width="190" height="38" rx="6" fill="#f9f9f7" stroke="#e1e0d9"/>
+    <text x="56" y="152">Public weather APIs</text>
+    <rect x="40" y="178" width="190" height="38" rx="6" fill="#f9f9f7" stroke="#e1e0d9"/>
+    <text x="56" y="202">Fixed IoT sensors</text>
+    <rect x="40" y="228" width="190" height="38" rx="6" fill="#f9f9f7" stroke="#e1e0d9"/>
+    <text x="56" y="252">Robotic inspection</text>
+  </g>
+
+  <!-- bus into ingestion -->
+  <g stroke="#898781" fill="none" stroke-width="1.5">
+    <path d="M230 97 H245"/><path d="M230 147 H245"/><path d="M230 197 H245"/><path d="M230 247 H245"/>
+    <path d="M245 97 V247"/>
+    <path d="M245 184 H258" marker-end="url(#ah)"/>
+  </g>
+
+  <!-- ingestion gate -->
+  <rect x="262" y="155" width="112" height="58" rx="6" fill="#fcfcfb" stroke="#898781" stroke-dasharray="4 3"/>
+  <text x="318" y="179" font-size="13" font-weight="600" fill="#0b0b0b" text-anchor="middle">Ingestion</text>
+  <text x="318" y="197" font-size="11" fill="#52514e" text-anchor="middle">datum-checked</text>
+
+  <!-- core container -->
+  <rect x="400" y="40" width="420" height="438" rx="10" fill="#f4f8fe" stroke="#b7d3f6"/>
+
+  <!-- ingestion -> core, fanning to twin + hazard -->
+  <g stroke="#2a78d6" fill="none" stroke-width="1.5">
+    <path d="M374 184 H414"/>
+    <path d="M414 184 V104"/>
+    <path d="M414 104 H428" marker-end="url(#ahb)"/>
+    <path d="M414 182 H428" marker-end="url(#ahb)"/>
+  </g>
+
+  <!-- core boxes -->
+  <g font-size="13.5" fill="#0b0b0b">
+    <rect x="430" y="78" width="360" height="52" rx="6" fill="#ffffff" stroke="#b7d3f6"/>
+    <text x="610" y="100" text-anchor="middle" font-weight="600">Digital twin</text>
+    <text x="610" y="118" text-anchor="middle" font-size="11.5" fill="#52514e">5R1C ISO-13790 — load and generation under weather</text>
+
+    <rect x="430" y="156" width="360" height="52" rx="6" fill="#ffffff" stroke="#b7d3f6"/>
+    <text x="610" y="178" text-anchor="middle" font-weight="600">Hazard propagation</text>
+    <text x="610" y="196" text-anchor="middle" font-size="11.5" fill="#52514e">per-asset exposure vs surveyed elevation</text>
+
+    <rect x="430" y="234" width="360" height="64" rx="6" fill="#ffffff" stroke="#2a78d6" stroke-width="2"/>
+    <text x="610" y="258" text-anchor="middle" font-weight="700">Dependency graph</text>
+    <text x="610" y="276" text-anchor="middle" font-size="11.5" fill="#52514e">single points of failure · cascade sets</text>
+    <text x="610" y="291" text-anchor="middle" font-size="11.5" fill="#52514e">sensitivity under unmeasured assets</text>
+
+    <rect x="430" y="324" width="360" height="52" rx="6" fill="#ffffff" stroke="#b7d3f6"/>
+    <text x="610" y="346" text-anchor="middle" font-weight="600">Energy model → CERI</text>
+    <text x="610" y="364" text-anchor="middle" font-size="11.5" fill="#52514e">adequacy against critical load, not connectivity</text>
+
+    <rect x="430" y="402" width="360" height="52" rx="6" fill="#ffffff" stroke="#b7d3f6"/>
+    <text x="610" y="424" text-anchor="middle" font-weight="600">Recovery prioritization</text>
+    <text x="610" y="442" text-anchor="middle" font-size="11.5" fill="#52514e">minimum repair set, ranked by service per hour</text>
+  </g>
+
+  <!-- vertical flow arrows -->
+  <g stroke="#2a78d6" fill="none" stroke-width="1.5">
+    <path d="M610 130 V152" marker-end="url(#ahb)"/>
+    <path d="M610 208 V230" marker-end="url(#ahb)"/>
+    <path d="M610 298 V320" marker-end="url(#ahb)"/>
+    <path d="M610 376 V398" marker-end="url(#ahb)"/>
+    <path d="M610 454 V516" marker-end="url(#ahb)"/>
+  </g>
+
+  <!-- decision surfaces -->
+  <text x="400" y="508" font-size="12" font-weight="600" letter-spacing="1.2" fill="#898781">DECISION SURFACES</text>
+  <rect x="400" y="520" width="420" height="56" rx="8" fill="#f9f9f7" stroke="#e1e0d9"/>
+  <text x="610" y="545" font-size="13" fill="#0b0b0b" text-anchor="middle">REST API · analyst dashboard</text>
+  <text x="610" y="563" font-size="13" fill="#0b0b0b" text-anchor="middle">grounded natural-language interface</text>
+
+  <!-- side note -->
+  <text x="40" y="330" font-size="11.5" fill="#52514e">Sensing and hazard are</text>
+  <text x="40" y="347" font-size="11.5" fill="#52514e">pluggable inputs behind one</text>
+  <text x="40" y="364" font-size="11.5" fill="#52514e">contract. The reasoning core</text>
+  <text x="40" y="381" font-size="11.5" fill="#52514e">does not change when a</text>
+  <text x="40" y="398" font-size="11.5" fill="#52514e">modality is added.</text>
+</svg>

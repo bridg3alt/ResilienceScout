@@ -16,5 +16,8 @@ ASSETS/
 *.mp4
 *.mov
 
-# Working docs — kept locally, not published.
-docs/
+# Working docs — kept locally, not published. The two the README links to are published.
+docs/*
+!docs/evaluation.md
+!docs/new-facility.md
+!docs/img/

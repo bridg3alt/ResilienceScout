@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 430" width="900" height="430" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#898781"/>
+    </marker>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#d03b3b"/>
+    </marker>
+  </defs>
+
+  <rect width="900" height="430" fill="#fcfcfb"/>
+  <rect x="0.5" y="0.5" width="899" height="429" fill="none" stroke="#e1e0d9"/>
+
+  <g font-size="13" fill="#0b0b0b">
+    <!-- upstream column -->
+    <rect x="30" y="46" width="150" height="44" rx="6" fill="#f9f9f7" stroke="#e1e0d9"/>
+    <text x="105" y="73" text-anchor="middle">Substation</text>
+
+    <rect x="30" y="206" width="150" height="44" rx="6" fill="#f9f9f7" stroke="#e1e0d9"/>
+    <text x="105" y="233" text-anchor="middle">PV array</text>
+
+    <rect x="30" y="286" width="150" height="44" rx="6" fill="#f9f9f7" stroke="#e1e0d9"/>
+    <text x="105" y="313" text-anchor="middle">Road access</text>
+
+    <!-- source column -->
+    <rect x="250" y="46" width="150" height="44" rx="6" fill="#ffffff" stroke="#b7d3f6"/>
+    <text x="325" y="73" text-anchor="middle">Transformer</text>
+
+    <rect x="250" y="126" width="150" height="44" rx="6" fill="#ffffff" stroke="#b7d3f6"/>
+    <text x="325" y="153" text-anchor="middle">Battery</text>
+
+    <rect x="250" y="206" width="150" height="44" rx="6" fill="#ffffff" stroke="#b7d3f6"/>
+    <text x="325" y="233" text-anchor="middle">Solar inverter</text>
+
+    <rect x="250" y="286" width="150" height="44" rx="6" fill="#ffffff" stroke="#b7d3f6"/>
+    <text x="325" y="313" text-anchor="middle">Generator</text>
+
+    <!-- panel: SPOF -->
+    <rect x="480" y="144" width="160" height="88" rx="8" fill="#fbeceb" stroke="#d03b3b" stroke-width="2.5"/>
+    <text x="560" y="180" text-anchor="middle" font-weight="700">Distribution</text>
+    <text x="560" y="199" text-anchor="middle" font-weight="700">panel</text>
+    <text x="560" y="218" text-anchor="middle" font-size="11" fill="#d03b3b" font-weight="600">single point of failure</text>
+
+    <!-- facility -->
+    <rect x="720" y="158" width="150" height="60" rx="8" fill="#ffffff" stroke="#0b0b0b" stroke-width="1.5"/>
+    <text x="795" y="184" text-anchor="middle" font-weight="700">Facility</text>
+    <text x="795" y="203" text-anchor="middle" font-size="11" fill="#52514e">critical load</text>
+  </g>
+
+  <!-- edges: upstream -> source -->
+  <g stroke="#898781" fill="none" stroke-width="1.5">
+    <path d="M180 68 H246" marker-end="url(#a)"/>
+    <path d="M180 228 H246" marker-end="url(#a)"/>
+    <path d="M180 308 H246" marker-end="url(#a)"/>
+  </g>
+
+  <!-- edges: source -> panel -->
+  <g stroke="#898781" fill="none" stroke-width="1.5">
+    <path d="M400 68  H440 V172 H476" marker-end="url(#a)"/>
+    <path d="M400 148 H440 V182 H476" marker-end="url(#a)"/>
+    <path d="M400 228 H440 V196 H476" marker-end="url(#a)"/>
+    <path d="M400 308 H440 V206 H476" marker-end="url(#a)"/>
+  </g>
+
+  <!-- panel -> facility -->
+  <path d="M640 188 H716" stroke="#d03b3b" stroke-width="2" fill="none" marker-end="url(#ar)"/>
+
+  <!-- annotations -->
+  <text x="30" y="360" font-size="11.5" fill="#52514e">Road access carries no power. It bounds how long the generator can run,</text>
+  <text x="30" y="377" font-size="11.5" fill="#52514e">so its consequence is delayed and visible only through the graph.</text>
+
+  <text x="480" y="268" font-size="11.5" fill="#52514e">Every source routes through the panel.</text>
+  <text x="480" y="285" font-size="11.5" fill="#52514e">Losing it is fatal regardless of what</text>
+  <text x="480" y="302" font-size="11.5" fill="#52514e">survives — a property of topology,</text>
+  <text x="480" y="319" font-size="11.5" fill="#52514e">not of condition.</text>
+
+  <text x="30" y="30" font-size="12" font-weight="600" letter-spacing="1.2" fill="#898781">ENERGY DEPENDENCY GRAPH — REFERENCE SITE</text>
+</svg>
