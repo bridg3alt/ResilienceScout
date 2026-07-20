@@ -1,10 +1,19 @@
 """
 ResilienceScout — the data-provenance chokepoint.
 
-Every campus-specific number the model depends on lives here, so that replacing an assumption
-with a measurement is a one-file job rather than an archaeology expedition.
+Every facility-specific number the model depends on now lives in a site file under `sites/`,
+loaded here at import. This module is the boundary between two kinds of thing:
 
-Four epistemic tiers, and the comments say which is which:
+  * FACILITY DATA — what you measure and enter for a building: nameplate, equipment elevations,
+    the vertical datum, observed flood marks, critical load. It lives in `sites/<id>.json`.
+    Deploying to a new building is copying that file and editing its numbers — not touching code.
+    The active site defaults to `decennial_block`; set the RESILIENCE_SITE environment variable
+    to load a different one.
+
+  * MODEL CONSTANTS and PROVENANCE NARRATIVE — the datum machinery, the score thresholds, and the
+    epistemic tiering below. These stay in code because they describe the method, not the site.
+
+Four epistemic tiers, and the registries below say which value sits in which:
   * SOURCED  — a real, measured or cited value. Carries its provenance, and no TODO.
   * DERIVED  — not measured here, but COMPUTED from a surveyed input plus a published standard,
                with both named. Weaker than SOURCED, categorically stronger than a guess,
@@ -12,7 +21,7 @@ Four epistemic tiers, and the comments say which is which:
   * REPORTED — stated by the site owner (college facilities staff, institutional records) but not
                independently verified. Weaker than SOURCED because nobody checked it; far stronger
                than INVENTED because it has a named human source who can be asked again.
-  * INVENTED — a guess. Carries a TODO(user).
+  * INVENTED — a guess. Carries a TODO(user) and stays in UNSURVEYED_VALUES until measured.
 
 The DERIVED tier exists because some gaps can be closed from a desk and some cannot, and
 collapsing that distinction wastes the ones that can. It is NOT a way to retire a TODO quietly:
@@ -20,16 +29,44 @@ a derived value stays in UNSURVEYED_VALUES until it is actually measured. What i
 defensible number to reason with, and — as with shelter capacity below — sometimes a derivation
 CONTRADICTS the standing guess, which is a finding in itself.
 
-After the site surveys of the Decennial Block (latest 2026-07-18) the SOURCED tier is now the
-large majority: the vertical datum, the 2018 flood mark, six of eight equipment elevations and
-the full DER nameplate are measured. What remains invented is enumerated in UNSURVEYED_VALUES
-below — that registry, not a hand-set boolean, is what drives the dashboard notice.
-
-One invented value lives outside this file: REPAIR_EFFORT_H in recovery.py.
-
-See the site survey record for how the remaining figures get collected.
+The registries below describe the active site's survey campaign (currently the Decennial Block,
+latest survey 2026-07-18). One invented value lives outside this file: REPAIR_EFFORT_H in
+recovery.py.
 """
 from __future__ import annotations
+
+import json
+import os
+from pathlib import Path
+
+SITES_DIR = Path(__file__).parent / "sites"
+
+DEFAULT_SITE_ID = "decennial_block"
+
+ACTIVE_SITE_ID = os.environ.get("RESILIENCE_SITE", DEFAULT_SITE_ID)
+
+
+def available_sites() -> list[str]:
+    """Site ids with a config file under sites/ — the facilities this deployment can load."""
+    return sorted(p.stem for p in SITES_DIR.glob("*.json"))
+
+
+def _load_site(site_id: str) -> dict:
+    path = SITES_DIR / f"{site_id}.json"
+    if not path.exists():
+        raise FileNotFoundError(
+            f"no site config {path.name!r} in {SITES_DIR} (available: {available_sites()}). "
+            f"Set RESILIENCE_SITE to a known site, or add the JSON file."
+        )
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+_SITE = _load_site(ACTIVE_SITE_ID)
+
+
+# --------------------------------------------------------------------------------------------
+# Provenance narrative — describes the active site's survey campaign.
+# --------------------------------------------------------------------------------------------
 
 UNSURVEYED_VALUES: dict[str, str] = {
     "REPAIR_EFFORT_H": (
@@ -63,8 +100,6 @@ REPORTED_VALUES: dict[str, str] = {
     ),
 }
 
-REPORTED_ABOVE_FLOOD: frozenset[str] = frozenset({"substation"})
-
 SURVEYED_VALUES: dict[str, str] = {
     "vertical_datum": "Finished floor level tied to MSL (11.84 m) and to external grade (0.18 m step)",
     "flood_line": "August 2018 high-water mark, 0.82 m above finished floor, evidenced by wall staining",
@@ -90,11 +125,16 @@ DERIVED_VALUES: dict[str, str] = {
 
 DATA_IS_PLACEHOLDER = bool(UNSURVEYED_VALUES)
 
+
+# --------------------------------------------------------------------------------------------
+# Vertical datum — model constants plus the site's surveyed reference heights.
+# --------------------------------------------------------------------------------------------
+
 ELEVATION_DATUM = "above_finished_floor_m"
 
-FINISHED_FLOOR_LEVEL_MSL_M: float | None = 11.84
+FINISHED_FLOOR_LEVEL_MSL_M: float | None = _SITE["datum"].get("finished_floor_level_msl_m")
 
-GROUND_TO_FLOOR_STEP_M: float | None = 0.18
+GROUND_TO_FLOOR_STEP_M: float | None = _SITE["datum"].get("ground_to_floor_step_m")
 
 
 class DatumError(ValueError):
@@ -140,42 +180,31 @@ def depth_above_floor(value_m: float, datum: str) -> float:
     )
 
 
-FLOOD_LINE_M = 0.82
+FLOOD_LINE_M = _SITE["flood"]["observed_line_m"]
 
-OBSERVED_EVENTS: dict[str, dict] = {
-    "kerala_2018": {
-        "building": "Decennial Block",
-        "room": "Main Entrance Lobby",
-        "depth_m": 0.82,
-        "datum": ELEVATION_DATUM,
-        "evidence": "wall staining",
-        "observation_date": "2026-07-18",
-        "observer": "Field Survey Team",
-        "notes": (
-            "Continuous mud line visible along north entrance wall. Highest clear flood mark "
-            "measured 0.82 m above finished floor."
-        ),
-    },
-}
+OBSERVED_EVENTS: dict[str, dict] = _SITE["flood"]["observed_events"]
 
-FLOOD_SCENARIOS_M = {
-    "minor": 0.30,
-    "moderate": 0.60,
-    "severe": 1.20,
-}
+FLOOD_SCENARIOS_M = _SITE["flood"]["scenarios"]
+
+
+def _elevation(entry) -> float:
+    """
+    An equipment elevation from the site file, in metres above finished floor.
+
+    A bare number is already in the model datum. An object {"value", "datum"} was measured against
+    something else (external grade, MSL) and is converted through the datum machinery, so the
+    file records what was actually surveyed rather than a silently pre-computed height.
+    """
+    if isinstance(entry, dict):
+        return round(depth_above_floor(entry["value"], entry["datum"]), 3)
+    return entry
+
 
 EQUIPMENT_ELEVATION_M = {
-    "transformer": 1.10,
-    "battery": 0.45,
-    "solar_inverter": 1.80,
-    "distribution_panel": 1.60,
-    "generator": 0.85,
-    "comms": 2.00,
-    "solar_panels": 9.6,
-    "road_access": round(depth_above_floor(0.10, "above_external_ground_m"), 3),
+    name: _elevation(entry) for name, entry in _SITE["equipment_elevation_m"].items()
 }
 
-SURVEY_UNCERTAINTY_M: float | None = 0.03
+SURVEY_UNCERTAINTY_M: float | None = _SITE["datum"].get("survey_uncertainty_m")
 
 _FALLBACK_AT_RISK_MARGIN_M = 0.3
 
@@ -190,33 +219,35 @@ EQUIPMENT_EFFECT = {
     "generator": {"has_generator": False, "generator_runtime_h": 0.0, "generator_rated_kw": 0.0},
 }
 
-
 REQUIRED_BACKUP_H = 12.0
 CRITICAL_SPOF_LIMIT = 2
 
+REPORTED_ABOVE_FLOOD: frozenset[str] = frozenset(_SITE.get("reported_above_flood", ()))
+
+
+# --------------------------------------------------------------------------------------------
+# Facility roster — built from the active site file.
+# --------------------------------------------------------------------------------------------
+
 SHELTERS = [
     {
-        "id": "decennial_block",
-        "name": "Decennial Block — Sahrdaya College of Engineering, Kodakara",
-        "pop_served": 400,
-        "building": {
-            "name": "Decennial Block — Sahrdaya College of Engineering, Kodakara",
-            "latitude": 10.3595, "longitude": 76.2859,
-            "floor_area_m2": 1450.0,
-            "num_floors": 3,
-            "solar_kwp": 18.0,
-            "battery_kwh": 40.0,
-            "has_generator": True,
-            "generator_rated_kw": 50.0,
-            "generator_runtime_h": 14.0,
-            "critical_load_kw": 18.0,
-        },
-    },
+        "id": _SITE["id"],
+        "name": _SITE["name"],
+        "pop_served": _SITE["pop_served"],
+        "building": dict(_SITE["building"]),
+    }
 ]
 
 POP_SERVED = {s["id"]: s["pop_served"] for s in SHELTERS}
 
 SHELTER_AREA_PER_PERSON_M2 = 3.5
+
+
+def get_shelter(site_id: str) -> dict:
+    for s in SHELTERS:
+        if s["id"] == site_id:
+            return s
+    raise KeyError(f"unknown shelter id: {site_id!r} (known: {[s['id'] for s in SHELTERS]})")
 
 
 def shelter_capacity_upper_bound(site_id: str) -> int | None:
@@ -266,17 +297,14 @@ def pop_served_overstatement(site_id: str, pop: int | None = None) -> int:
         return 0
     return max(0, (POP_SERVED.get(site_id, 0) if pop is None else pop) - bound)
 
-CRITICAL_LOAD_ITEMISATION_KW = {
-    "emergency_lights": 2.0,
-    "network": 0.8,
-    "server_rack": 1.2,
-    "classrooms": 6.0,
-    "lift": 5.0,
-    "fans": 2.5,
-    "misc": 2.5,
-}
 
-CRITICAL_LOAD_REPORTED_KW = 18.0
+# --------------------------------------------------------------------------------------------
+# Critical load — two disagreeing survey records, kept as a range rather than averaged.
+# --------------------------------------------------------------------------------------------
+
+CRITICAL_LOAD_ITEMISATION_KW = dict(_SITE["critical_load"]["itemisation_kw"])
+
+CRITICAL_LOAD_REPORTED_KW = _SITE["critical_load"]["reported_kw"]
 
 
 def critical_load_itemised_total_kw() -> float:
@@ -304,13 +332,6 @@ def critical_load_range_kw() -> tuple[float, float]:
     """(low, high) kW across both survey records. Equal values mean the records agree."""
     a, b = CRITICAL_LOAD_REPORTED_KW, critical_load_itemised_total_kw()
     return (min(a, b), max(a, b))
-
-
-def get_shelter(site_id: str) -> dict:
-    for s in SHELTERS:
-        if s["id"] == site_id:
-            return s
-    raise KeyError(f"unknown shelter id: {site_id!r} (known: {[s['id'] for s in SHELTERS]})")
 
 
 def flooded_equipment(flood_depth_m: float) -> list[str]:

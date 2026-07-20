@@ -1,0 +1,72 @@
+{
+  "id": "decennial_block",
+  "name": "Decennial Block — Sahrdaya College of Engineering, Kodakara",
+  "pop_served": 400,
+
+  "datum": {
+    "finished_floor_level_msl_m": 11.84,
+    "ground_to_floor_step_m": 0.18,
+    "survey_uncertainty_m": 0.03
+  },
+
+  "building": {
+    "name": "Decennial Block — Sahrdaya College of Engineering, Kodakara",
+    "latitude": 10.3595,
+    "longitude": 76.2859,
+    "floor_area_m2": 1450.0,
+    "num_floors": 3,
+    "solar_kwp": 18.0,
+    "battery_kwh": 40.0,
+    "has_generator": true,
+    "generator_rated_kw": 50.0,
+    "generator_runtime_h": 14.0,
+    "critical_load_kw": 18.0
+  },
+
+  "equipment_elevation_m": {
+    "transformer": 1.10,
+    "battery": 0.45,
+    "solar_inverter": 1.80,
+    "distribution_panel": 1.60,
+    "generator": 0.85,
+    "comms": 2.00,
+    "solar_panels": 9.6,
+    "road_access": { "value": 0.10, "datum": "above_external_ground_m" }
+  },
+
+  "flood": {
+    "observed_line_m": 0.82,
+    "scenarios": {
+      "minor": 0.30,
+      "moderate": 0.60,
+      "severe": 1.20
+    },
+    "observed_events": {
+      "kerala_2018": {
+        "building": "Decennial Block",
+        "room": "Main Entrance Lobby",
+        "depth_m": 0.82,
+        "datum": "above_finished_floor_m",
+        "evidence": "wall staining",
+        "observation_date": "2026-07-18",
+        "observer": "Field Survey Team",
+        "notes": "Continuous mud line visible along north entrance wall. Highest clear flood mark measured 0.82 m above finished floor."
+      }
+    }
+  },
+
+  "critical_load": {
+    "reported_kw": 18.0,
+    "itemisation_kw": {
+      "emergency_lights": 2.0,
+      "network": 0.8,
+      "server_rack": 1.2,
+      "classrooms": 6.0,
+      "lift": 5.0,
+      "fans": 2.5,
+      "misc": 2.5
+    }
+  },
+
+  "reported_above_flood": ["substation"]
+}

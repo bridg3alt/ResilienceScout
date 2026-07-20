@@ -5,7 +5,7 @@
 > **When climate hazards disable a critical facility, which single intervention restores the most
 > service with the least repair effort?**
 
-[![Tests](https://img.shields.io/badge/tests-80%20passing-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-84%20passing-brightgreen)]()
 [![Python](https://img.shields.io/badge/python-3.13-blue)]()
 [![License](https://img.shields.io/badge/license-MIT-lightgrey)](LICENSE)
 
@@ -113,9 +113,9 @@ condition.
 | REST API, analyst dashboard | Implemented |
 | Provenance tracking | Implemented, enforced in tests |
 | Robotic inspection, CV damage detection | In development |
-| Multi-site deployment | Architecture supports; awaiting second surveyed site |
+| Multi-site deployment | Each facility is a `sites/*.json` config; awaiting a second surveyed site |
 
-80 regression tests, running fully offline with no API keys. **No evaluation results are reported
+84 regression tests, running fully offline with no API keys. **No evaluation results are reported
 yet** — see the [evaluation plan](docs/evaluation.md). Population-served and repair-effort figures
 are placeholders, so recovery rankings demonstrate a method rather than issuing advice.
 
@@ -146,7 +146,7 @@ An optional `GROQ_API_KEY` enables prose responses from the natural-language int
 it returns retrieved evidence and live model output.
 
 ```bash
-python -m pytest                 # 80 regression tests
+python -m pytest                 # 84 regression tests
 ```
 
 ---
@@ -156,6 +156,7 @@ python -m pytest                 # 80 regression tests
 ```text
 backend/resilienceos/    reasoning core — dependency graph, recovery, CERI,
                          hazard propagation, twin, energy model, REST API
+backend/resilienceos/sites/   per-facility config (one JSON per building)
 backend/tests/           regression suite
 dashboard/               React analyst interface
 docs/                    evaluation plan, deployment guide, figures
@@ -182,7 +183,7 @@ docs/                    evaluation plan, deployment guide, figures
 
 ## Roadmap
 
-- Per-site parameter separation; second surveyed facility on shared upstream infrastructure
+- Second surveyed facility on shared upstream infrastructure (facility data is now a `sites/*.json` file)
 - Surveyed repair-effort and population data, replacing placeholders
 - Robotic inspection platform feeding the live ingestion contract
 - Twin validation against logged indoor conditions
