@@ -37,8 +37,6 @@ def graph(site, building):
     return build_graph(site, building)
 
 
-# --- elevation -> inundation ---------------------------------------------------------------
-
 def test_flooded_equipment_is_elevation_ordered():
     shallow = presets.flooded_equipment(0.2)
     deep = presets.flooded_equipment(1.2)
@@ -62,7 +60,7 @@ def test_roof_panels_survive_while_their_ground_inverter_drowns():
 
 def test_flood_zeroes_only_the_der_that_actually_drowned(building, mild_day):
     dry = analyze_flood(building, mild_day, 0.0)
-    wet = analyze_flood(building, mild_day, 0.5)   # battery at 0.45 m is under; inverter is not
+    wet = analyze_flood(building, mild_day, 0.5)
     assert "battery" in wet.failed_equipment
     assert wet.surviving_der["battery_kwh"] == 0.0
     assert wet.surviving_der["solar_kwp"] == dry.surviving_der["solar_kwp"]
@@ -80,15 +78,13 @@ def test_analyze_flood_reuses_the_energy_balance(building, mild_day):
     flood-specific reimplementation.
     """
     dry = analyze_flood(building, mild_day, 0.0)
-    wet = analyze_flood(building, mild_day, 0.5)   # surveyed battery height is 0.45 m
+    wet = analyze_flood(building, mild_day, 0.5)
     assert wet.backup_hours < dry.backup_hours
 
 
 def test_flood_result_is_flagged_placeholder(building, mild_day):
     assert analyze_flood(building, mild_day, 0.5).placeholder is presets.DATA_IS_PLACEHOLDER
 
-
-# --- dependency graph ----------------------------------------------------------------------
 
 def test_distribution_panel_is_a_single_point_of_failure(graph):
     """Every source is wired through the panel, so it is fatal even with full DER redundancy."""
@@ -132,8 +128,6 @@ def test_downstream_reports_the_cascade(graph):
     assert "solar_inverter" in downstream(graph, "solar_panels")
 
 
-# --- CERI ----------------------------------------------------------------------------------
-
 def test_ceri_has_the_four_transparent_sub_scores(building, graph, mild_day):
     c = ceri_score(analyze_flood(building, mild_day, 0.5), graph, building)
     assert set(c["components"]) == {
@@ -156,15 +150,13 @@ def test_ceri_reward_end_is_never_floored(building, graph, mild_day):
     The Phase 0 lesson, enforced on the new index: no sub-score may clamp at the reward end,
     or improvements stop registering exactly where they matter.
     """
-    c = ceri_score(analyze_flood(building, mild_day, 5.0), graph, building)   # catastrophic
+    c = ceri_score(analyze_flood(building, mild_day, 5.0), graph, building)
     assert c["components"]["flood_readiness"] > 0, "flood_readiness floored — improvements would vanish"
     assert c["components"]["critical_vulnerabilities"] > 0
 
 
-# --- recovery ------------------------------------------------------------------------------
-
 def test_restoration_plan_is_empty_when_still_powered(graph):
-    plan = restoration_plan(graph, {"transformer"})   # battery/solar/gen still up
+    plan = restoration_plan(graph, {"transformer"})
     assert plan["already_powered"] is True
     assert plan["repairs"] == []
 
@@ -190,7 +182,7 @@ def test_restoration_plan_picks_the_cheapest_viable_source(graph):
     failed = {"transformer", "battery", "solar_inverter", "generator", "distribution_panel"}
     plan = restoration_plan(graph, failed)
     assert set(plan["repairs"]) == {"distribution_panel", "solar_inverter"}
-    assert plan["effort_h"] == pytest.approx(14.0)   # panel 8.0 + inverter 6.0
+    assert plan["effort_h"] == pytest.approx(14.0)
 
 
 def test_recovery_ranks_by_population_per_effort_hour(mild_day):
@@ -201,9 +193,6 @@ def test_recovery_ranks_by_population_per_effort_hour(mild_day):
     """
     site = presets.get_shelter("decennial_block")
     b = Building(**site["building"])
-    # 1.7 m, not 1.3 m: with the surveyed elevations the distribution panel sits at 1.60 m, and
-    # until IT goes under the shelter is still powered by the (higher) solar inverter — so at
-    # 1.3 m there is nothing to prioritise and the ranking is empty.
     fl = analyze_flood(b, mild_day, 1.7)
 
     graphs, failed_by_site, pop_served = [], {}, {}
@@ -227,28 +216,23 @@ def test_deferred_repairs_are_the_failures_the_plan_deliberately_skips(mild_day)
     """
     site = presets.get_shelter("decennial_block")
     b = Building(**site["building"])
-    fl = analyze_flood(b, mild_day, 1.7)   # deep enough to take the distribution panel down
+    fl = analyze_flood(b, mild_day, 1.7)
     g = build_graph(site, b, fl)
     failed = sorted(n["id"] for n in g["nodes"] if n["health"] == "failed")
 
     row = prioritize([g], {site["id"]: failed})["ranked"][0]
 
-    # partition: nothing counted twice, nothing dropped
     assert set(row["repairs"]) & set(row["deferred_repairs"]) == set()
     assert set(row["repairs"]) | set(row["deferred_repairs"]) == set(row["all_failed"])
 
-    # the saving is real and consistent
     assert row["full_repair_effort_h"] >= row["repair_effort_h"]
     assert row["effort_saved_h"] == pytest.approx(
         row["full_repair_effort_h"] - row["repair_effort_h"]
     )
 
-    # every deferred asset carries the cost avoided, so the UI can show the comparison
     assert all(d["effort_h"] > 0 for d in row["deferred"])
     assert {d["id"] for d in row["deferred"]} == set(row["deferred_repairs"])
 
-
-# --- unsurveyed assets must not read as safe -------------------------------------------------
 
 def test_unsurveyed_asset_reads_unknown_not_ok(site, building, mild_day):
     """
@@ -262,7 +246,7 @@ def test_unsurveyed_asset_reads_unknown_not_ok(site, building, mild_day):
     would let a verbal assurance read off the map as a survey result, and it is no longer "unknown"
     because a named source did make a claim.
     """
-    deep = analyze_flood(building, mild_day, 2.0)   # deeper than every surveyed elevation
+    deep = analyze_flood(building, mild_day, 2.0)
     g = build_graph(site, building, deep)
     substation = next(n for n in g["nodes"] if n["id"] == "substation")
 
@@ -284,7 +268,6 @@ def test_an_asset_with_neither_height_nor_report_still_reads_unknown(site, build
     assert ups["id"] not in presets.REPORTED_ABOVE_FLOOD
     assert ups["health"] == "unknown"
 
-    # Every asset that IS surveyed still resolves to a real assessment at this depth.
     assessed = [n for n in g["nodes"] if n["elevation_m"] is not None]
     assert assessed, "no surveyed assets in the graph"
     assert all(n["health"] in ("ok", "at_risk", "failed") for n in assessed)
@@ -305,15 +288,12 @@ def test_ups_backs_the_it_load_and_is_not_a_single_point_of_failure(site, buildi
     assert "ups" not in single_points_of_failure(graph)
     assert single_points_of_failure(graph) == ["distribution_panel"]
 
-    # it reaches comms, and comms alone — it never carries the shelter's power
     assert downstream(graph, "ups") == ["comms", "shelter"]
     assert shelter_powered(graph, {"ups"}), "UPS loss must not cut shelter power"
 
-    # no guessed height: it was not in the elevation survey
     ups = next(n for n in graph["nodes"] if n["id"] == "ups")
     assert ups["elevation_m"] is None
 
-    # the network rack is deliberately NOT a second node — it is what `comms` already represents
     assert "network_rack" not in ids
 
 
@@ -331,8 +311,6 @@ def test_unknown_health_does_not_leak_into_the_repair_plan(site, building, mild_
     assert "substation" not in row["repairs"]
     assert "substation" not in row["deferred_repairs"]
 
-
-# --- the two survey records that disagree ----------------------------------------------------
 
 def test_critical_load_itemisation_still_disagrees_with_the_reported_total():
     """
@@ -366,12 +344,6 @@ def test_recovery_does_not_credit_population_to_a_repair_that_restores_nothing(g
     assert not shelter_powered(graph, failed - {"solar_inverter"}), (
         "repairing the inverter alone must NOT power the shelter while the panel is down"
     )
-
-
-# --- Desk-derived bounds -----------------------------------------------------------------------
-# These cover the values that were CONSTRAINED without a site visit (presets.DERIVED_VALUES).
-# A derivation is not a measurement, so none of them clears DATA_IS_PLACEHOLDER — that is
-# asserted too, because quietly retiring the notice is the failure mode worth guarding.
 
 
 def test_shelter_capacity_bound_is_derived_from_surveyed_area(site):
@@ -408,7 +380,6 @@ def test_reported_pop_served_is_corroborated_by_the_floor_area_bound():
 def test_capacity_bound_is_none_rather_than_invented_for_a_site_without_surveyed_area():
     """No floor area, no ceiling. Returning a number anyway would fabricate the constraint."""
     assert presets.shelter_capacity_upper_bound("no_such_site") is None
-    # An unknown ceiling is not a violated one.
     assert presets.pop_served_exceeds_area_bound("no_such_site") is False
     assert presets.pop_served_overstatement("no_such_site") == 0
 
@@ -429,7 +400,6 @@ def test_critical_load_is_reported_as_the_interval_the_records_bracket():
     assert (low, high) == (18.0, 20.0)
     assert low == presets.CRITICAL_LOAD_REPORTED_KW
     assert high == presets.critical_load_itemised_total_kw()
-    # 19.0 would be the tempting "compromise". Nothing may produce it.
     assert low != high, "records agree; the range machinery should be retired deliberately"
 
 
@@ -446,20 +416,14 @@ def test_neither_derivations_nor_reports_clear_the_placeholder_notice():
     assert presets.DATA_IS_PLACEHOLDER == bool(presets.UNSURVEYED_VALUES)
     assert "REPAIR_EFFORT_H" in presets.UNSURVEYED_VALUES
 
-    # Values the college supplied moved to REPORTED — they must be in exactly one tier, never
-    # dropped from all of them, which is how an unverified figure becomes an invisible one.
     for key in ("pop_served", "critical_load_kw"):
         assert key in presets.REPORTED_VALUES
         assert key not in presets.UNSURVEYED_VALUES
         assert key not in presets.SURVEYED_VALUES
 
-    # The registries are kept disjoint so the UI cannot present a report or a derivation as a survey.
     assert not set(presets.DERIVED_VALUES) & set(presets.SURVEYED_VALUES)
     assert not set(presets.REPORTED_VALUES) & set(presets.SURVEYED_VALUES)
     assert not set(presets.REPORTED_VALUES) & set(presets.UNSURVEYED_VALUES)
-
-
-# --- Pricing the unmeasured elevations ---------------------------------------------------------
 
 
 def test_substation_is_reported_unassessed_not_ok(graph):
@@ -481,7 +445,6 @@ def test_unassessed_sensitivity_runs_the_graph_both_ways(graph):
     s = unassessed_sensitivity(graph)
 
     assert "substation" in s["unassessed"]
-    # Both worlds are evaluated, and the pessimistic one is never more optimistic than the other.
     assert s["powered_if_unassessed_fail"] <= s["powered_if_unassessed_survive"]
     assert s["changes_outcome"] == (
         s["powered_if_unassessed_survive"] != s["powered_if_unassessed_fail"]
@@ -521,22 +484,16 @@ def test_a_reported_claim_is_used_but_still_challenged(site, building, mild_day)
     """
     from resilienceos.dependency_graph import unassessed_nodes, unassessed_sensitivity
 
-    deep = analyze_flood(building, mild_day, 2.0)   # deeper than every surveyed elevation
+    deep = analyze_flood(building, mild_day, 2.0)
     g = build_graph(site, building, deep)
 
     substation = next(n for n in g["nodes"] if n["id"] == "substation")
-    assert substation["health"] == "ok_reported"       # the claim is used
-    assert "substation" in unassessed_nodes(g)         # and still challenged
+    assert substation["health"] == "ok_reported"
+    assert "substation" in unassessed_nodes(g)
 
     s = unassessed_sensitivity(g)
     assert "substation" in s["unassessed"]
     assert s["powered_if_unassessed_fail"] <= s["powered_if_unassessed_survive"]
-
-
-# --- Generator in the energy model -------------------------------------------------------------
-# The generator was once in the dependency graph but absent from every energy calculation, so the
-# repo documented a surveyed 62.5 kVA set with 14 h of fuel while reporting 3.4 h of backup. These
-# pin the fix.
 
 
 def test_generator_contributes_its_fuel_endurance_to_backup(building, mild_day):
@@ -551,7 +508,6 @@ def test_generator_contributes_its_fuel_endurance_to_backup(building, mild_day):
     no_gen = analyze_flood(without, mild_day, 0.0).backup_hours
 
     assert with_gen > no_gen
-    # The set's full endurance shows up, not a token contribution.
     assert with_gen - no_gen == pytest.approx(14.0, abs=0.1)
 
 
@@ -582,7 +538,7 @@ def test_an_undersized_generator_contributes_nothing_rather_than_a_partial_load(
 
 def test_drowning_the_generator_removes_its_hours(building, mild_day):
     """EQUIPMENT_EFFECT must zero the runtime, not just the flag."""
-    dry = analyze_flood(building, mild_day, 0.80)    # generator sits at 0.85 m
+    dry = analyze_flood(building, mild_day, 0.80)
     wet = analyze_flood(building, mild_day, 0.90)
     assert "generator" not in dry.failed_equipment
     assert "generator" in wet.failed_equipment
@@ -597,7 +553,7 @@ def test_energy_readiness_responds_to_the_flood_not_just_the_nameplate(site, bui
     measuring readiness against that hazard.
     """
     dry = analyze_flood(building, mild_day, 0.0)
-    wet = analyze_flood(building, mild_day, 1.2)     # battery and generator both under
+    wet = analyze_flood(building, mild_day, 1.2)
     dry_c = ceri_score(dry, build_graph(site, building, dry), building)
     wet_c = ceri_score(wet, build_graph(site, building, wet), building)
 
@@ -614,13 +570,6 @@ def test_the_generator_margin_is_inside_the_survey_uncertainty():
     margin = presets.EQUIPMENT_ELEVATION_M["generator"] - presets.FLOOD_LINE_M
     assert round(margin, 2) == 0.03
     assert margin < presets.AT_RISK_MARGIN_M, "margin escaped the error bars; re-check the finding"
-
-
-# --- Recovery targets load adequacy, not just connectivity ---------------------------------------
-# shelter_powered() asks "is a wire connected?". flood.operational asks "can it carry the load for
-# the required window?". At 1.2 m those disagree: the roof inverter survives so the graph reads
-# powered, while the energy model reports 0 h of backup. Keying recovery off connectivity alone
-# made the post-flood page empty at exactly the depth the shelter scored Critical.
 
 
 def test_connectivity_and_adequacy_genuinely_disagree(site, building, mild_day):
@@ -644,10 +593,8 @@ def test_recovery_plans_repairs_when_the_shelter_cannot_carry_its_load(site, bui
     g = build_graph(site, building, flood)
     failed = set(presets.flooded_equipment(depth))
 
-    # Old behaviour: connectivity only -> nothing to do.
     assert restoration_plan(g, failed)["already_powered"] is True
 
-    # New behaviour: adequacy layered on top -> a real plan.
     def is_adequate(repaired):
         return analyze_flood(building, mild_day, depth, repaired=repaired).operational
 
@@ -655,7 +602,6 @@ def test_recovery_plans_repairs_when_the_shelter_cannot_carry_its_load(site, bui
     assert plan["already_powered"] is False
     assert plan["achievable"] is True
     assert plan["repairs"], "a shelter at 0 h backup must have something worth repairing"
-    # And the plan it picks must actually restore service, not merely reconnect a wire.
     assert is_adequate(frozenset(plan["repairs"]))
 
 

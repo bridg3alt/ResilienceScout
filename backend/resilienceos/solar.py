@@ -9,9 +9,9 @@ from __future__ import annotations
 
 import pandas as pd
 
-PERFORMANCE_RATIO = 0.80          # inverter + wiring + soiling losses
-TEMP_COEFF = -0.004               # power loss per deg C above 25C cell temp
-NOCT_RISE = 25.0                  # cell temp rise over ambient at 800 W/m2
+PERFORMANCE_RATIO = 0.80
+TEMP_COEFF = -0.004
+NOCT_RISE = 25.0
 
 
 def pv_generation_kw(solar_kwp: float, ghi: float, t_air: float) -> float:

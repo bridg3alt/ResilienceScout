@@ -10,3 +10,11 @@ node_modules/
 dist/
 .vite/
 .claude/
+
+# Screen recordings / large media — keep demo videos out of git (GitHub rejects >100MB).
+ASSETS/
+*.mp4
+*.mov
+
+# Working docs — kept locally, not published.
+docs/

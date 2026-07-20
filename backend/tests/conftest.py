@@ -24,9 +24,7 @@ def synthetic_day(peak_temp_c: float, min_temp_c: float | None = None) -> pd.Dat
     hours = np.arange(24)
     mean = (peak_temp_c + min_temp_c) / 2.0
     amp = (peak_temp_c - min_temp_c) / 2.0
-    # peak at hour 15, trough at hour 03
     temp = mean + amp * np.cos((hours - 15) * np.pi / 12.0)
-    # daytime half-sine irradiance, zero before 06:00 and after 18:00
     ghi = np.where((hours >= 6) & (hours <= 18), 950.0 * np.sin((hours - 6) * np.pi / 12.0), 0.0)
     ghi = np.clip(ghi, 0.0, None)
     return pd.DataFrame({

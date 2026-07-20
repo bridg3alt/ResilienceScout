@@ -15,8 +15,6 @@ import type { DependencyGraphResponse, GraphNode, Health } from "../lib/api";
 
 const HEALTH_FILL: Record<Health, string> = {
   ok: "#10b981",
-  // A paler green than `ok`, deliberately: reported-dry reads as working at a glance, which it is,
-  // while still being visibly not the same claim as a measured elevation.
   ok_reported: "#6ee7b7",
   at_risk: "#f59e0b",
   failed: "#ef4444",
@@ -67,54 +65,6 @@ interface DependencyMapProps {
   graph: DependencyGraphResponse;
 }
 
-/**
- * What the un-measured mounting heights are worth.
- *
- * The model can never flood an asset it has no height for, so those assets always read as having
- * survived — an optimistic assumption that is invisible on the map. Rather than hide it or guess
- * the height, the backend runs the graph both ways and reports whether the outcome actually
- * turns on the gap.
- *
- * Leading with `changes_outcome` is deliberate: "this missing measurement does not change the
- * answer" is genuinely reassuring and tells a reader not to chase it, while the opposite case
- * needs to be loud. A note that only ever said "something is unmeasured" would do neither.
- */
-function UnassessedNote({ graph }: { graph: DependencyGraphResponse }) {
-  const s = graph.unassessed_sensitivity;
-  if (!s || s.unassessed.length === 0) return null;
-
-  const labelFor = (id: string) => graph.nodes.find((n) => n.id === id)?.label ?? id;
-  const names = s.unassessed.map(labelFor).join(", ");
-
-  return (
-    <div
-      className={`mt-4 rounded-lg border px-3 py-2 text-xs ${
-        s.changes_outcome
-          ? "border-amber-500/40 bg-amber-500/10 text-sidebar-foreground/85"
-          : "border-sidebar-border/40 text-sidebar-foreground/70"
-      }`}
-    >
-      <span className="font-medium">Height never measured: {names}. </span>
-      {s.changes_outcome ? (
-        <>
-          The map assumes {s.unassessed.length > 1 ? "these stay" : "this stays"} dry — and that
-          assumption is what makes the shelter read as powered here. If{" "}
-          {s.unassessed.length > 1 ? "they flood" : "it floods"}, the shelter goes dark. Measuring{" "}
-          {s.unassessed.length > 1 ? "them" : "it"} is the single highest-value thing left to do.
-        </>
-      ) : (
-        <>
-          The map assumes {s.unassessed.length > 1 ? "these stay" : "this stays"} dry — for the
-          substation because the college reports it sits on high ground, for anything else because
-          an asset with no recorded height cannot flood in the model. Tested both ways, the
-          shelter&apos;s power outcome is the same either way, so nothing shown here depends on
-          those assumptions holding.
-        </>
-      )}
-    </div>
-  );
-}
-
 export function DependencyMap({ graph }: DependencyMapProps) {
   const [selected, setSelected] = useState<GraphNode | null>(null);
   const { positions, width, height } = layout(graph.nodes);
@@ -160,7 +110,6 @@ export function DependencyMap({ graph }: DependencyMapProps) {
                 </marker>
               </defs>
 
-              {/* edges: provider -> dependent, drawn right-to-left toward the shelter */}
               {graph.edges.map((e, i) => {
                 const from = positions[e.from];
                 const to = positions[e.to];
@@ -185,7 +134,6 @@ export function DependencyMap({ graph }: DependencyMapProps) {
                 );
               })}
 
-              {/* nodes */}
               {graph.nodes.map((n) => {
                 const p = positions[n.id];
                 const fill = HEALTH_FILL[n.health];
@@ -217,8 +165,6 @@ export function DependencyMap({ graph }: DependencyMapProps) {
               })}
             </svg>
           </div>
-
-          <UnassessedNote graph={graph} />
         </CardContent>
       </Card>
 

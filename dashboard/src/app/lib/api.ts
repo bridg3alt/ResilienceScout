@@ -268,7 +268,6 @@ async function get<T>(path: string): Promise<T> {
     try {
       detail = (await res.json()).detail ?? detail;
     } catch {
-      /* body wasn't JSON; keep the status text */
     }
     throw new Error(`${res.status} ${detail}`);
   }

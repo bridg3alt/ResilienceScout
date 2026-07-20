@@ -24,9 +24,6 @@ export function RecoveryPrioritization({ recovery }: RecoveryPrioritizationProps
   const { ranked, total_population_restorable, total_effort_h } = recovery;
   const comparing = ranked.length > 1;
 
-  // An empty plan is a RESULT, not a blank page: the shelter rode the flood out. Saying only
-  // "nothing to repair" reads like a broken screen, so the empty state explains what happened and
-  // how to see the ranking work — without manufacturing a failure to fill the space.
   if (ranked.length === 0) {
     return (
       <Card className="border-sidebar-border/30 bg-gradient-to-br from-sidebar via-sidebar to-sidebar-accent">
@@ -35,24 +32,12 @@ export function RecoveryPrioritization({ recovery }: RecoveryPrioritizationProps
             No repairs needed at this water level
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3 text-sm text-sidebar-foreground/70">
+        <CardContent className="space-y-2 text-sm text-sidebar-foreground/70">
           <p>
-            At {recovery.flood_depth_m.toFixed(2)} m of water, equipment has been damaged — but at
-            least one power source stayed dry and above the water line, so the shelter never lost
-            power. There is no repair to prioritise because nothing needs restoring to keep the
-            lights on.
+            Equipment has flooded at {recovery.flood_depth_m.toFixed(2)} m, but a power source
+            stayed dry — so the shelter never lost power and there is nothing to restore.
           </p>
-          <p>
-            That is the dependency graph doing its job. A damage checklist would list the flooded
-            transformer and battery as failures and stop there; the graph shows the shelter is
-            still carried by what survived.
-          </p>
-          <p className="text-xs">
-            To see the ranking with real failures, drag the flood depth above the generator — or
-            send a higher reading through <span className="font-mono">POST /api/observations</span>{" "}
-            (see <span className="font-mono">scripts/simulate_drone.py</span>), and this page will
-            update on its own.
-          </p>
+          <p className="text-xs">Raise the flood depth above the generator to rank real repairs.</p>
         </CardContent>
       </Card>
     );
@@ -94,7 +79,6 @@ function RepairArgument({ row, comparing }: { row: RecoveryRow; comparing: boole
         </div>
       )}
 
-      {/* 1. The recommendation. */}
       <div className="rounded-xl border border-sidebar-primary/40 bg-sidebar-primary/10 px-4 py-3">
         <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-sidebar-foreground/70">
           <Wrench className="size-3.5" /> Do this first
@@ -117,7 +101,6 @@ function RepairArgument({ row, comparing }: { row: RecoveryRow; comparing: boole
         )}
       </div>
 
-      {/* 2. What it is correct NOT to do — the half a damage report cannot give you. */}
       {row.deferred.length > 0 && (
         <div className="rounded-xl border border-sidebar-border/40 px-4 py-3">
           <div className="text-xs uppercase tracking-wide text-sidebar-foreground/60">
@@ -137,7 +120,6 @@ function RepairArgument({ row, comparing }: { row: RecoveryRow; comparing: boole
         </div>
       )}
 
-      {/* 3. The comparison the minimum set is beating. */}
       {row.effort_saved_h > 0 && (
         <p className="text-xs text-sidebar-foreground/70">
           Repairing everything that flooded would take{" "}
@@ -156,10 +138,6 @@ function RepairArgument({ row, comparing }: { row: RecoveryRow; comparing: boole
         </p>
       )}
 
-      {/* 4. What the recommendation above is resting on.
-          The population figure drives the whole ranking, so a known problem with it belongs next
-          to the recommendation rather than buried in a data notice. Same for a repair whose hours
-          are a fallback: the plan's total — and therefore its rank — partly rests on a guess. */}
       {(row.pop_exceeds_area_bound || (row.estimated_effort_repairs?.length ?? 0) > 0) && (
         <div className="space-y-1.5 rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-xs text-sidebar-foreground/80">
           <div className="uppercase tracking-wide text-sidebar-foreground/60">

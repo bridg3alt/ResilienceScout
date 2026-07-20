@@ -63,8 +63,6 @@ def building() -> Building:
     return Building(battery_kwh=20)
 
 
-# --- the exact failure mode ----------------------------------------------------------------
-
 def test_exceedance_never_saturates_in_the_danger_regime():
     """
     Deep in the danger regime (peak HI 57 C), a real improvement MUST raise the sub-score.
@@ -84,8 +82,8 @@ def test_thermal_sub_score_strictly_decreasing_in_degree_hours():
         for d in degh_values
     ]
     assert sub == sorted(sub, reverse=True), f"not monotonic: {list(zip(degh_values, sub))}"
-    assert sub[0] == 100          # zero exposure -> full marks
-    assert sub[-1] >= 0           # never negative, never clamps away real differences
+    assert sub[0] == 100
+    assert sub[-1] >= 0
 
 
 def test_reward_end_is_never_floored():
@@ -95,7 +93,6 @@ def test_reward_end_is_never_floored():
     """
     absurd = resilience_score(_hw(exceedance_degh=10_000.0), _out())
     assert absurd["components"]["thermal_exceedance"] >= 0
-    # and it must still respond to change even out here
     a = resilience_score(_hw(exceedance_degh=10_000.0), _out())["score"]
     b = resilience_score(_hw(exceedance_degh=9_000.0), _out())["score"]
     assert b >= a
@@ -117,24 +114,19 @@ def test_sub_score_retains_resolution_across_the_real_measured_range():
     assert sub(800) < sub(400) < sub(200) < sub(100), "no resolution left in the severe range"
 
 
-# --- the metric itself ---------------------------------------------------------------------
-
 def test_degree_hours_above_counts_only_exceedance():
     import pandas as pd
-    s = pd.Series([30.0, 32.0, 35.0, 42.0])   # caution = 32
-    # 0 + 0 + 3 + 10
+    s = pd.Series([30.0, 32.0, 35.0, 42.0])
     assert degree_hours_above(s, HI_CAUTION) == pytest.approx(13.0)
 
 
 def test_degree_hours_prices_duration_not_just_peak():
     """Two days with the SAME peak but different duration must not score the same."""
     import pandas as pd
-    spike = pd.Series([32.0] * 23 + [42.0])          # one bad hour
-    plateau = pd.Series([42.0] * 24)                 # all day
+    spike = pd.Series([32.0] * 23 + [42.0])
+    plateau = pd.Series([42.0] * 24)
     assert degree_hours_above(spike) < degree_hours_above(plateau)
 
-
-# --- end-to-end through the real twin ------------------------------------------------------
 
 def test_cool_roof_gain_is_positive_under_severe_heat(building, severe_day):
     """The headline regression: this returned exactly 0 before the fix."""
@@ -144,8 +136,6 @@ def test_cool_roof_gain_is_positive_under_severe_heat(building, severe_day):
     deltas = compare(building, severe_day, "cool_roof", outage_start=14, outage_dur=6)["deltas"]
     assert deltas["peak_heat_index"] < 0, "cool roof must reduce the peak heat index"
     assert deltas["exceedance_degh"] < 0, "cool roof must reduce cumulative heat exposure"
-    # Assert on the unrounded score: the real gain here is well under 1 point, and rounding to
-    # an int before comparing is what hid it from the optimizer in the first place.
     assert deltas["resilience_score_exact"] > 0, "a real thermal improvement must raise the score"
 
 

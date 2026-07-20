@@ -12,12 +12,10 @@ from __future__ import annotations
 
 import os
 
-# Load GROQ_API_KEY / GROQ_MODEL from a .env file if present, so every entry point
-# (dashboard, JSON API, smoke tests) reads the key without requiring a shell export.
 try:
     from dotenv import load_dotenv
 
-    load_dotenv()  # searches cwd upward for a .env
+    load_dotenv()
 except ModuleNotFoundError:
     pass
 
@@ -46,7 +44,7 @@ def ask_llm(system: str, user: str, temperature: float = 0.2) -> str:
             ],
         )
         return resp.choices[0].message.content.strip()
-    except Exception as e:  # network/key/quota — degrade gracefully, never crash the demo
+    except Exception as e:
         return _fallback(user) + f"\n\n_(LLM unavailable: {type(e).__name__})_"
 
 
@@ -65,7 +63,6 @@ def _fallback(user: str) -> str:
 
 
 def _extract_context(user: str) -> str:
-    # The prompt embeds a CONTEXT section; echo it back in offline mode.
     if "CONTEXT:" in user:
         return user.split("CONTEXT:", 1)[1].strip()
     return user.strip()

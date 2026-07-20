@@ -22,8 +22,6 @@ from resilienceos.api import app
 client = TestClient(app)
 
 
-# --- depth_above_floor -----------------------------------------------------------------------
-
 def test_already_in_model_datum_passes_through():
     assert presets.depth_above_floor(1.2, presets.ELEVATION_DATUM) == 1.2
 
@@ -67,7 +65,6 @@ def test_above_ground_reading_converts_now_that_the_step_height_is_surveyed():
     """
     step = presets.GROUND_TO_FLOOR_STEP_M
     assert step is not None
-    # water 1.2 m deep outside stands 1.2 - 0.18 above the floor inside
     assert presets.depth_above_floor(1.2, "above_external_ground_m") == pytest.approx(1.2 - step)
 
 
@@ -92,11 +89,6 @@ def test_conversion_never_silently_returns_the_input():
         presets.depth_above_floor(9.99, "nonsense")
 
 
-# --- sanity ceiling on authored constants ----------------------------------------------------
-
-# A depth above a building's own floor is metres. A figure above MSL for inland Thrissur is tens
-# of metres. This ceiling is deliberately loose: it is not a claim about how deep floods get, it
-# only catches a wrong-datum paste, which is off by an order of magnitude rather than a little.
 _PLAUSIBLE_ABOVE_FLOOR_CEILING_M = 5.0
 
 
@@ -112,16 +104,12 @@ def test_authored_flood_constants_are_plausible_as_above_floor_depths():
     )
 
 
-# Assets can legitimately sit BELOW finished floor level — the access road does, at -0.08 m,
-# because the road surface is lower than the building slab. So the floor of this range is not
-# zero; it is "not absurdly far below", which still catches a wrong-datum paste.
 _PLAUSIBLE_ABOVE_FLOOR_MIN_M = -2.0
 
 
 def test_equipment_elevations_are_plausible_as_above_floor_heights():
     suspects = {
         a: e for a, e in presets.EQUIPMENT_ELEVATION_M.items()
-        # solar panels are roof-mounted, so they legitimately clear the ceiling
         if a != "solar_panels"
         and not _PLAUSIBLE_ABOVE_FLOOR_MIN_M <= e <= _PLAUSIBLE_ABOVE_FLOOR_CEILING_M
     }
@@ -137,8 +125,6 @@ def test_road_access_sits_below_the_finished_floor():
     assert presets.EQUIPMENT_ELEVATION_M["road_access"] == pytest.approx(0.10 - 0.18)
 
 
-# --- API boundary ----------------------------------------------------------------------------
-
 def test_observation_in_model_datum_is_accepted_and_stored_converted():
     r = client.post("/api/observations", json={
         "site_id": "decennial_block",
@@ -150,7 +136,6 @@ def test_observation_in_model_datum_is_accepted_and_stored_converted():
     stored = r.json()["stored"]
     assert stored["flood_depth_m"] == 0.8
     assert stored["datum"] == presets.ELEVATION_DATUM
-    # provenance is kept so a conversion can be audited after the fact
     assert stored["raw_reading_m"] == 0.8
     assert stored["raw_datum"] == presets.ELEVATION_DATUM
 
@@ -170,7 +155,6 @@ def test_msl_observation_is_accepted_and_stored_converted():
     stored = r.json()["stored"]
     assert stored["flood_depth_m"] == pytest.approx(12.66 - presets.FINISHED_FLOOR_LEVEL_MSL_M)
     assert stored["datum"] == presets.ELEVATION_DATUM
-    # provenance: the untouched input survives the conversion
     assert stored["raw_reading_m"] == 12.66
     assert stored["raw_datum"] == "above_msl_m"
 
@@ -215,33 +199,21 @@ def test_registry_entries_match_the_values_that_are_actually_unsurveyed():
     unsurveyed = presets.UNSURVEYED_VALUES
     reported = presets.REPORTED_VALUES
 
-    # --- Reported by the college, not verified. These moved OUT of `unsurveyed` when the college
-    # supplied a figure, and must be in `reported` instead — never silently dropped from both,
-    # which is how a verbal assurance turns into an apparent measurement.
     assert "pop_served" in reported
     assert "pop_served" not in unsurveyed
     assert presets.POP_SERVED["decennial_block"] == 400
 
-    # The college settled WHICH critical-load record to use, but the records still disagree: the
-    # itemisation sums to 20.0 against the confirmed 18.0. Resolving the choice is not the same as
-    # reconciling the arithmetic, and conflating them would bury a 2.0 kW error nobody has found.
     assert "critical_load_kw" in reported
     assert not presets.critical_load_is_reconciled()
 
-    # The substation's flood exposure is a REPORTED claim, not a height. It must still have no
-    # entry in EQUIPMENT_ELEVATION_M — writing a number there to represent "high ground" would
-    # fabricate the measurement this whole registry exists to protect.
     assert "substation_flood_exposure" in reported
     assert "substation" in presets.REPORTED_ABOVE_FLOOD
     assert "substation" not in presets.EQUIPMENT_ELEVATION_M
 
-    # the substation repair estimate is still absent from recovery.py
     from resilienceos import recovery
     assert "REPAIR_EFFORT_H" in unsurveyed
     assert "substation" not in recovery.REPAIR_EFFORT_H
 
-    # No value may sit in two tiers at once — that is how a reader ends up seeing the same figure
-    # described as both measured and unverified.
     for a, b in ((unsurveyed, reported), (reported, presets.SURVEYED_VALUES),
                  (unsurveyed, presets.SURVEYED_VALUES)):
         assert not set(a) & set(b)
@@ -253,12 +225,6 @@ def test_surveyed_and_unsurveyed_registries_do_not_overlap():
     assert not (set(presets.SURVEYED_VALUES) & set(presets.UNSURVEYED_VALUES))
     assert presets.SURVEYED_VALUES, "nothing recorded as surveyed — the banner would read wrong"
 
-
-# --- The depth control's reference marks -----------------------------------------------------
-# The dashboard's flood-depth slider renders the observed flood line, the uncertainty band and
-# every asset elevation. Those are SURVEYED values, so they are served rather than written into
-# the frontend: a measurement copied into a React component is a measurement that can drift from
-# presets.py with nothing failing. These tests pin the serving contract, not the numbers.
 
 def test_sites_serves_the_surveyed_hazard_reference():
     """The slider's marks must come from presets, so there is one place each height is written."""

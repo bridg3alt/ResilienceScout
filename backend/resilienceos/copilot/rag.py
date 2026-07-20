@@ -21,9 +21,9 @@ from .llm import ask_llm, has_llm
 _KNOWLEDGE_DIR = os.path.join(os.path.dirname(__file__), "knowledge")
 _COLLECTION = "resilienceos_kb"
 
-_collection = None          # chromadb collection (primary)
-_chunks: list[dict] = []    # [{text, source}] — always loaded
-_tf_index = None            # lightweight fallback index
+_collection = None
+_chunks: list[dict] = []
+_tf_index = None
 _use_fallback = False
 
 
@@ -54,7 +54,6 @@ def _load_chunks():
     return _chunks
 
 
-# ---- primary: ChromaDB (semantic, local ONNX embeddings) ----------------------
 def _ensure_chroma():
     global _collection
     if _collection is not None:
@@ -76,7 +75,6 @@ def _ensure_chroma():
     return col
 
 
-# ---- fallback: pure-python TF-IDF cosine (no heavy deps, no download) ----------
 _TOKEN = re.compile(r"[a-z]+")
 
 
@@ -127,7 +125,7 @@ def retrieve(query: str, k: int = 3) -> list[dict]:
             return [{"text": d, "source": m["source"]}
                     for d, m in zip(res["documents"][0], res["metadatas"][0])]
         except Exception:
-            _use_fallback = True  # OOM / no model download / etc. -> degrade
+            _use_fallback = True
     return _tfidf_query(query, k)
 
 

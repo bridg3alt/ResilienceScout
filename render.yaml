@@ -7,7 +7,7 @@
 # 1. FREE-TIER SLEEP. A free instance stops after ~15 minutes idle and takes ~50 seconds to wake.
 #    A reviewer clicking a link and waiting 50 seconds on a blank dashboard has already left.
 #    Either upgrade this to a paid instance, or point an external pinger (cron-job.org) at
-#    /health every 10 minutes to keep it awake. See docs/DEPLOY.md.
+#    /health every 10 minutes to keep it awake.
 #
 # 2. ALLOWED_ORIGINS is deliberately NOT set here. It has to carry the real dashboard URL, which
 #    does not exist until the frontend is deployed, and guessing it would silently produce a CORS

@@ -26,7 +26,6 @@ _GROUND_RULES = (
     "a point, say so."
 )
 
-# role -> (display label, focus instruction)
 SPECIALISTS = {
     "weather_analyst": (
         "Weather Analyst",
@@ -94,7 +93,6 @@ def answer_multiagent(question: str, sim_context: str, k: int = 3,
         + f"\n--- Retrieved guidelines ---\n{evidence}"
     )
 
-    # Offline (no key): fall back to the existing single grounded answer so it still works.
     if not has_llm():
         base = single_answer(question, sim_context, k=k)
         base["agent_notes"] = {

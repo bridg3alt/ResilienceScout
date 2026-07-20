@@ -49,8 +49,7 @@ export function CopilotPanel({ siteId, phase, depthM }: CopilotPanelProps) {
           <Bot className="size-4" /> Copilot
         </CardTitle>
         <p className="text-xs text-sidebar-foreground/70">
-          Answers are grounded in retrieved guidelines plus live model output. Without a
-          GROQ_API_KEY the backend returns the grounded evidence instead of prose.
+          Grounded in this shelter&apos;s live numbers. Every answer lists its sources.
         </p>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -95,8 +94,7 @@ export function CopilotPanel({ siteId, phase, depthM }: CopilotPanelProps) {
             <div className="space-y-2 border-t border-sidebar-border/30 pt-2">
               <div className="flex flex-wrap items-center gap-2 text-xs text-sidebar-foreground/70">
                 <span>
-                  Answered using live shelter data + {answer.sources.length} reference{" "}
-                  {answer.sources.length === 1 ? "guideline" : "guidelines"}.
+                  {answer.sources.length} {answer.sources.length === 1 ? "source" : "sources"}
                 </span>
                 <button
                   onClick={() => setShowSources((v) => !v)}

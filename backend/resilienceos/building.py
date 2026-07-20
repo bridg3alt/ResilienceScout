@@ -14,8 +14,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field, asdict
 from math import sqrt
 
-# --- Material presets (indicative; India-typical) -------------------------------
-# U-value [W/m2K] of opaque walls
 WALL_U = {
     "brick_uninsulated": 2.0,
     "brick_plaster": 1.8,
@@ -23,38 +21,34 @@ WALL_U = {
     "aac_block": 0.6,
     "insulated": 0.35,
 }
-# U-value [W/m2K] of roof (flat RCC roofs dominate Indian public buildings)
 ROOF_U = {
     "rcc_bare": 3.2,
     "rcc_tiled": 2.6,
-    "cool_roof": 3.2,      # same U; benefit is high solar reflectance -> see roof_solar_absorptance
+    "cool_roof": 3.2,
     "insulated_roof": 0.5,
 }
-# Solar absorptance of the roof surface (cool roof reflects most shortwave)
 ROOF_SOLAR_ABSORPTANCE = {
     "rcc_bare": 0.85,
     "rcc_tiled": 0.65,
     "cool_roof": 0.25,
     "insulated_roof": 0.6,
 }
-# Glazing: U-value [W/m2K] and SHGC (solar heat gain coefficient)
 GLAZING = {
     "single_clear": {"u": 5.7, "shgc": 0.82},
     "single_tinted": {"u": 5.7, "shgc": 0.55},
     "double_clear": {"u": 2.8, "shgc": 0.70},
     "double_lowe": {"u": 1.8, "shgc": 0.40},
 }
-# Thermal mass class -> capacitance per floor area [J/m2K] (ISO 13790 12.3.1.2)
 MASS_CLASS = {
     "light": 80000,
     "medium": 165000,
-    "heavy": 260000,   # concrete/masonry -> typical Indian public building
+    "heavy": 260000,
 }
 
-CEILING_HEIGHT_M = 3.2      # per storey
-LAMBDA_AT = 4.5             # ISO 13790: ratio of total internal area to floor area
-PERSON_SENSIBLE_W = 90.0    # sensible heat per occupant [W]
-EQUIPMENT_W_PER_M2 = 5.0    # base plug/equipment load when occupied [W/m2]
+CEILING_HEIGHT_M = 3.2
+LAMBDA_AT = 4.5
+PERSON_SENSIBLE_W = 90.0
+EQUIPMENT_W_PER_M2 = 5.0
 
 
 @dataclass
@@ -63,7 +57,7 @@ class Building:
     name: str = "Decennial Block"
     latitude: float = 12.9716
     longitude: float = 77.5946
-    floor_area_m2: float = 1200.0        # TOTAL conditioned floor area
+    floor_area_m2: float = 1200.0
     num_floors: int = 3
     window_to_wall_ratio: float = 0.25
     wall_material: str = "brick_plaster"
@@ -71,26 +65,18 @@ class Building:
     glazing: str = "single_clear"
     mass_class: str = "heavy"
     has_hvac: bool = True
-    hvac_capacity_w_per_m2: float = 80.0  # installed cooling capacity per floor area
-    occupancy_peak: int = 120             # people at full occupancy
-    # Distributed energy resources
-    solar_kwp: float = 20.0               # rooftop PV capacity
+    hvac_capacity_w_per_m2: float = 80.0
+    occupancy_peak: int = 120
+    solar_kwp: float = 20.0
     battery_kwh: float = 0.0
     has_generator: bool = False
-    # Generator capability. Both default to 0.0, so a building that merely sets has_generator=True
-    # contributes no energy — the generator is then structurally present but carries nothing, which
-    # is the behaviour every caller had before these fields existed. Only a building that states
-    # its rating AND its fuel endurance gets credit for the set.
-    generator_rated_kw: float = 0.0       # continuous electrical output it can actually carry
-    generator_runtime_h: float = 0.0      # hours it can run on the fuel on site
-    # Comfort / operations
+    generator_rated_kw: float = 0.0
+    generator_runtime_h: float = 0.0
     t_set_cooling: float = 26.0
-    critical_load_kw: float = 5.0         # loads that must stay powered in an outage
-    # Calibration knobs. Defaults reproduce the uncalibrated twin exactly. Nothing tunes them
-    # automatically any more; set them by hand if measured indoor-temperature logs ever exist.
-    infiltration_ach: float = 0.7         # natural air changes per hour
-    capacitance_override: float | None = None  # J/m2K; None -> MASS_CLASS[mass_class]
-    solar_aperture_scale: float = 1.0     # scales inferred solar gain
+    critical_load_kw: float = 5.0
+    infiltration_ach: float = 0.7
+    capacitance_override: float | None = None
+    solar_aperture_scale: float = 1.0
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -99,7 +85,7 @@ class Building:
 @dataclass
 class Geometry:
     floor_area: float
-    walls_area: float          # opaque envelope area (facade opaque + roof) [m2]
+    walls_area: float
     window_area: float
     roof_area: float
     room_vol: float
@@ -117,7 +103,7 @@ def derive_geometry(b: Building) -> Geometry:
     window_area = facade * b.window_to_wall_ratio
     opaque_facade = facade - window_area
     roof_area = footprint
-    walls_area = opaque_facade + roof_area          # all opaque envelope
+    walls_area = opaque_facade + roof_area
     room_vol = b.floor_area_m2 * CEILING_HEIGHT_M
     total_internal_area = LAMBDA_AT * b.floor_area_m2
     return Geometry(
@@ -146,11 +132,9 @@ def solar_aperture_m2(b: Building, geo: Geometry) -> float:
     Multiply by global horizontal irradiance [W/m2] to get solar gains [W].
     """
     shgc = GLAZING[b.glazing]["shgc"]
-    window_frac = geo.window_area * shgc * 0.7  # 0.7 = frame/shading factor
-    # Roof soaks up shortwave; a fraction conducts inward. Cool roof cuts this hard.
+    window_frac = geo.window_area * shgc * 0.7
     roof_abs = ROOF_SOLAR_ABSORPTANCE[b.roof_material]
     roof_u = ROOF_U[b.roof_material]
-    # crude: inward roof gain fraction scales with absorptance and U
     roof_equiv = geo.roof_area * roof_abs * (roof_u / 3.2) * 0.04
     return (window_frac + roof_equiv) * b.solar_aperture_scale
 
@@ -161,7 +145,7 @@ def occupancy_at(hour_of_day: int, b: Building) -> int:
         return b.occupancy_peak
     if 8 == hour_of_day or 17 == hour_of_day:
         return b.occupancy_peak // 2
-    return max(b.occupancy_peak // 20, 0)  # skeleton staff / security
+    return max(b.occupancy_peak // 20, 0)
 
 
 def internal_gains_w(hour_of_day: int, b: Building) -> float:
@@ -184,9 +168,9 @@ def build_zone(b: Building, hvac_active: bool):
     u_windows = GLAZING[b.glazing]["u"]
 
     if hvac_active and b.has_hvac:
-        max_cool = -abs(b.hvac_capacity_w_per_m2)   # cooling is negative in rcbsim
+        max_cool = -abs(b.hvac_capacity_w_per_m2)
     else:
-        max_cool = 0.0                               # no cooling supplied -> free float
+        max_cool = 0.0
 
     capacitance = b.capacitance_override if b.capacitance_override is not None else MASS_CLASS[b.mass_class]
 
@@ -198,13 +182,13 @@ def build_zone(b: Building, hvac_active: bool):
         total_internal_area=geo.total_internal_area,
         u_walls=u_walls,
         u_windows=u_windows,
-        ach_vent=0.0,            # no mechanical ventilation assumed in these buildings
-        ach_infl=b.infiltration_ach,   # natural infiltration (calibratable)
+        ach_vent=0.0,
+        ach_infl=b.infiltration_ach,
         ventilation_efficiency=0.0,
         thermal_capacitance_per_floor_area=capacitance,
-        t_set_heating=12.0,      # low: we don't care about heating in this context
+        t_set_heating=12.0,
         t_set_cooling=b.t_set_cooling,
         max_cooling_energy_per_floor_area=max_cool,
-        max_heating_energy_per_floor_area=0.0,   # never heat
+        max_heating_energy_per_floor_area=0.0,
     )
     return zone, geo
